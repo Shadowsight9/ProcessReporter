@@ -7,12 +7,12 @@
 import Foundation
 
 extension PreferencesDataModel {
-	@UserDefaultsRelay("mappingList", defaultValue: MappingList(mappings: []))
-	static var mappingList: BehaviorRelay<MappingList>
+	@UserDefaultsRelay("mappingList", defaultValue: [Mapping]())
+	static var mappingList: BehaviorRelay<[Mapping]>
 }
 
 extension PreferencesDataModel {
-	enum MappingType: String, CaseIterable, DictionaryConvertible, UserDefaultsJSONStorable, DictionaryConvertibleDelegate {
+	enum MappingType: String, CaseIterable, UserDefaultsJSONStorable {
 		static func fromDictionary(_ dict: Any) -> MappingType {
 			return self.init(rawValue: dict as! String) ?? .processApplicationIdentifier
 		}
@@ -26,10 +26,6 @@ extension PreferencesDataModel {
 			return rawValue
 		}
 	 
-		func toDictionary() -> Any {
-			return rawValue
-		}
-
 		case processApplicationIdentifier = "process_application_identifier"
 		case processName = "process_name"
 		case mediaProcessApplicationIdentifier = "media_process_application_identifier"
@@ -49,7 +45,7 @@ extension PreferencesDataModel {
 		}
 	}
 
-	struct Mapping: DictionaryConvertible, UserDefaultsJSONStorable, Identifiable {
+	struct Mapping: UserDefaultsJSONStorable, Identifiable {
 		var id: String {
 			"\(from)-\(to)-\(type.rawValue)"
 		}
@@ -61,6 +57,14 @@ extension PreferencesDataModel {
 			let to = dict["to"] as! String
 			return Mapping(type: type, from: from, to: to)
 		}
+
+		func toDictionary() -> [String: Any] {
+			[
+				"type": type.rawValue,
+				"from": from,
+				"to": to,
+			]
+		}
 	 
 		let type: MappingType
 		let from: String
@@ -71,56 +75,15 @@ extension PreferencesDataModel {
 		}
 	}
 
-	struct MappingList: DictionaryConvertible, UserDefaultsJSONStorable, DictionaryConvertibleDelegate {
-		func toDictionary() -> Any {
-			return mappings.map { $0.toDictionary() }
-		}
-	 
-		static func fromDictionary(_ dict: Any) -> MappingList {
-			let dict = dict as! [[String: Any]]
-			let mappings = dict.map { Mapping.fromDictionary($0) }
-			return MappingList(mappings: mappings)
-		}
-	 
-		static func fromStorable(_ value: Any?) -> MappingList? {
-			guard let value = value else { return nil }
-			return fromDictionary(value)
-		}
-	 
-		func toStorable() -> Any? {
-			return toDictionary()
-		}
-	 
-		private var mappings: [Mapping] = []
-	 
-		init(mappings: [Mapping]) {
-			self.mappings = mappings
-		}
-	 
-		func getList() -> [Mapping] {
-			return mappings
-		}
+}
 
-		func addMapping(_ mapping: Mapping) {
-			PreferencesDataModel.shared.mappingList.accept(
-				MappingList(mappings: mappings + [mapping])
-			)
-		}
-		
-		func removeMapping(_ mappings: [Mapping]) {
-			PreferencesDataModel.shared.mappingList.accept(
-				MappingList(mappings: self.mappings.filter { item in
-					!mappings.contains(where: { $0 == item })
-				})
-			)
-		}
+extension Array: UserDefaultsStorable where Element == PreferencesDataModel.Mapping {
+	func toStorable() -> Any? {
+		map { $0.toDictionary() }
+	}
 
-		func editMapping(_ mapping: Mapping, for index: Int) {
-			PreferencesDataModel.shared.mappingList.accept(
-				MappingList(mappings: mappings.enumerated().map { i, item in
-					i == index ? mapping : item
-				})
-			)
-		}
+	static func fromStorable(_ value: Any?) -> [PreferencesDataModel.Mapping]? {
+		guard let value = value as? [[String: Any]] else { return nil }
+		return value.map { PreferencesDataModel.Mapping.fromDictionary($0) }
 	}
 }

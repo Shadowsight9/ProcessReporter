@@ -4,7 +4,16 @@ import SwiftUI
 final class StatusMenuStore: ObservableObject {
     static let shared = StatusMenuStore()
 
-    @Published var status: ReporterStatusBridge.ReporterStatus = .ready
+    enum ReporterStatus {
+        case ready
+        case syncing
+        case offline
+        case paused
+        case partialError
+        case error
+    }
+
+    @Published var status: ReporterStatus = .ready
     @Published var currentProcess = "No Process"
     @Published var currentMedia = "No Media"
     @Published var lastProcess = "N/A"
@@ -99,6 +108,20 @@ final class StatusMenuStore: ObservableObject {
 
     func openSettings() {
         SettingsWindowPresenter.shared.showWindow()
+    }
+
+    func updateCurrentMedia(_ mediaInfo: MediaInfo?) {
+        if let mediaInfo, let name = mediaInfo.name {
+            currentMedia = StatusMenuFormatter.mediaName(name, artist: mediaInfo.artist, playing: mediaInfo.playing)
+        } else {
+            currentMedia = "No Media"
+        }
+    }
+
+    func updateLastReport(_ report: ReportModel) {
+        lastProcess = report.processName ?? "N/A"
+        lastMedia = StatusMenuFormatter.mediaName(report.mediaName, artist: report.artist)
+        lastReportTime = report.timeStamp
     }
 
     deinit {

@@ -13,7 +13,7 @@ public class MediaInfoManager: NSObject {
   // System provider backed by MRNowPlayingRequest through a long-lived
   // osascript helper process. This avoids external dependencies while keeping
   // media detection working on newer macOS versions.
-  private static var provider: MediaInfoProvider = SystemNowPlayingProvider()
+  private static var provider = SystemNowPlayingProvider()
 
   // Cache the latest media info to avoid synchronous CLI calls on the main thread
   private static var latestInfo: MediaInfo?
@@ -125,7 +125,7 @@ actor MediaInfoFetchActor {
   /// - Coalescing within 200ms
   /// - Returning the same in-flight Task when already running
   /// - Timeout
-  func requestInfo(using provider: MediaInfoProvider, timeout seconds: TimeInterval = 3.0)
+  func requestInfo(using provider: SystemNowPlayingProvider, timeout seconds: TimeInterval = 3.0)
     async throws -> MediaInfo?
   {
     if let task = inFlightTask {

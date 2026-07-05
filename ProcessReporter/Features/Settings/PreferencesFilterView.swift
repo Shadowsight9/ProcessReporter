@@ -184,7 +184,7 @@ struct ApplicationTableView: View {
                 AppItem(
                     applicationIdentifier: appId,
                     name: appName,
-                    icon: AppUtility.shared.iconImage(forFileAt: url)
+                    icon: Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
                 )
             )
             saveFilteredApps()
@@ -276,7 +276,7 @@ struct PreferencesFilterView: View {
                 return AppItem(
                     applicationIdentifier: appId,
                     name: appInfo.displayName,
-                    icon: AppUtility.shared.iconImage(for: appId)
+                    icon: Image(nsImage: appInfo.icon)
                 )
             }
         }

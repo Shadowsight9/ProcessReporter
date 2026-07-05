@@ -7,7 +7,6 @@
 
 import AppKit
 import Foundation
-import SwiftUI
 
 /// 应用信息缓存结构
 struct AppInfo {
@@ -23,11 +22,6 @@ struct AppInfo {
         self.path = path
     }
 
-    static func defaultInfo(for bundleID: String) -> AppInfo {
-        let defaultIcon =
-            NSImage(systemSymbolName: "app", accessibilityDescription: nil) ?? NSImage()
-        return AppInfo(bundleID: bundleID, displayName: bundleID, icon: defaultIcon)
-    }
 }
 
 /// 应用程序工具类，用于处理应用程序信息的获取和转换
@@ -87,12 +81,29 @@ class AppUtility {
         return appInfo
     }
 
-    func iconImage(for bundleID: String) -> Image {
-        Image(nsImage: getAppInfo(for: bundleID).icon)
-    }
+    func installedApplications() -> [AppInfo] {
+        guard
+            let appFolders = try? FileManager.default.contentsOfDirectory(
+                at: URL(fileURLWithPath: "/Applications"),
+                includingPropertiesForKeys: nil
+            )
+        else {
+            return []
+        }
 
-    func iconImage(forFileAt url: URL) -> Image {
-        Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+        return appFolders.compactMap { url in
+            guard url.pathExtension == "app",
+                  let bundle = Bundle(url: url),
+                  let bundleID = bundle.bundleIdentifier
+            else {
+                return nil
+            }
+
+            let appName = url.deletingPathExtension().lastPathComponent
+            let icon = NSWorkspace.shared.icon(forFile: url.path)
+            return AppInfo(bundleID: bundleID, displayName: appName, icon: icon, path: url)
+        }
+        .sorted { $0.displayName < $1.displayName }
     }
 
     @discardableResult
@@ -104,88 +115,9 @@ class AppUtility {
         return NSWorkspace.shared.selectFile(appURL.path, inFileViewerRootedAtPath: "")
     }
 
-    /// 根据应用名称查找 Bundle ID
-    /// - Parameter appName: 应用显示名称
-    /// - Returns: 如果找到，返回对应的 Bundle ID，否则返回 nil
-    func getBundleID(for appName: String) -> String? {
-        // 尝试通过应用名查找应用
-        let fileManager = FileManager.default
-        let applicationsDirectory = "/Applications"
-        let appFiles = try? fileManager.contentsOfDirectory(atPath: applicationsDirectory)
-
-        // 首先在主应用目录查找
-        if let appFiles = appFiles {
-            for appFile in appFiles {
-                if appFile.hasSuffix(".app") {
-                    let appNameWithoutExtension = (appFile as NSString).deletingPathExtension
-                    if appNameWithoutExtension == appName {
-                        let appURL = URL(fileURLWithPath: "\(applicationsDirectory)/\(appFile)")
-                        if let bundle = Bundle(url: appURL),
-                            let bundleID = bundle.bundleIdentifier
-                        {
-                            return bundleID
-                        }
-                    }
-                }
-            }
-        }
-
-        // 也可以尝试使用系统API查找
-        let workspace = NSWorkspace.shared
-        let installedApps = workspace.runningApplications
-        for app in installedApps {
-            if app.localizedName == appName, let bundleID = app.bundleIdentifier {
-                return bundleID
-            }
-        }
-
-        return nil
-    }
-
     /// 清除缓存
     func clearCache() {
         appInfoCache.removeAll()
-    }
-
-    public static func getBundleIdentifierForPID(_ pid: pid_t) -> String? {
-        // 根据 PID 获取 NSRunningApplication 实例
-        if let runningApp = NSRunningApplication(processIdentifier: pid) {
-            // 获取 Bundle Identifier
-            return runningApp.bundleIdentifier
-        }
-        return nil
-    }
-
-    public static func getBundleIdentifierFromAuditToken(_ auditToken: audit_token_t) -> String? {
-        // 使用 Security 框架的 API 获取 Bundle Identifier
-        var auditToken = auditToken
-        let attributes = [
-            kSecGuestAttributeAudit: Data(
-                bytes: &auditToken, count: MemoryLayout<audit_token_t>.size)
-        ]
-
-        var code: SecCode?
-        var status = SecCodeCopyGuestWithAttributes(nil, attributes as CFDictionary, [], &code)
-
-        guard status == errSecSuccess, let code = code else {
-            print("Failed to get SecCode: \(status)")
-            return nil
-        }
-
-        var info: CFDictionary?
-        status = SecCodeCopySigningInformation(code as! SecStaticCode, [], &info)
-
-        guard status == errSecSuccess, let info = info as NSDictionary? else {
-            print("Failed to get signing information: \(status)")
-            return nil
-        }
-
-        // 从 signing information 中提取 Bundle Identifier
-        if let bundleID = info[kSecCodeInfoIdentifier as String] as? String {
-            return bundleID
-        }
-
-        return nil
     }
 
 }

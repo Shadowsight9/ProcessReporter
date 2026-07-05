@@ -64,27 +64,10 @@ struct AppPickerView: View {
 	}
 
 	private func loadInstalledApps() {
-		let fileManager = FileManager.default
-		guard
-			let appFolders = try? fileManager.contentsOfDirectory(
-				at: URL(fileURLWithPath: "/Applications"), includingPropertiesForKeys: nil
-			)
-		else {
-			return
+		installedApps = AppUtility.shared.installedApplications().compactMap { app in
+			guard let url = app.path else { return nil }
+			return (id: app.bundleID + url.absoluteString, name: app.displayName, url: url, applicationIdentifier: app.bundleID)
 		}
-
-		var apps: [AppItem] = []
-
-		for url in appFolders {
-			if url.pathExtension == "app", let bundle = Bundle(url: url),
-			   let bundleId = bundle.bundleIdentifier
-			{
-				let appName = url.deletingPathExtension().lastPathComponent
-				apps.append((id: bundleId + url.absoluteString, name: appName, url: url, applicationIdentifier: bundleId))
-			}
-		}
-
-		installedApps = apps.sorted(by: { $0.name < $1.name })
 	}
 }
 

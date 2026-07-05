@@ -9,7 +9,7 @@ final class PreferencesStore: ObservableObject {
     @Published var enabledTypes = PreferencesDataModel.enabledTypes.value.types
     @Published var ignoreNullArtist = PreferencesDataModel.ignoreNullArtist.value
     @Published var shellIntegration = PreferencesDataModel.shellIntegration.value
-    @Published var mappings = PreferencesDataModel.mappingList.value.getList()
+    @Published var mappings = PreferencesDataModel.mappingList.value
     @Published var filteredProcesses = PreferencesDataModel.filteredProcesses.value
     @Published var filteredMediaProcesses = PreferencesDataModel.filteredMediaProcesses.value
 
@@ -23,7 +23,7 @@ final class PreferencesStore: ObservableObject {
             PreferencesDataModel.enabledTypes.subscribeOnMain { [weak self] in self?.enabledTypes = $0.types },
             PreferencesDataModel.ignoreNullArtist.subscribeOnMain { [weak self] in self?.ignoreNullArtist = $0 },
             PreferencesDataModel.shellIntegration.subscribeOnMain { [weak self] in self?.shellIntegration = $0 },
-            PreferencesDataModel.mappingList.subscribeOnMain { [weak self] in self?.mappings = $0.getList() },
+            PreferencesDataModel.mappingList.subscribeOnMain { [weak self] in self?.mappings = $0 },
             PreferencesDataModel.filteredProcesses.subscribeOnMain { [weak self] in self?.filteredProcesses = $0 },
             PreferencesDataModel.filteredMediaProcesses.subscribeOnMain { [weak self] in self?.filteredMediaProcesses = $0 },
         ]
@@ -79,15 +79,19 @@ final class PreferencesStore: ObservableObject {
     }
 
     func addMapping(type: PreferencesDataModel.MappingType, from: String, to: String) {
-        PreferencesDataModel.mappingList.value.addMapping(.init(type: type, from: from, to: to))
+        PreferencesDataModel.mappingList.accept(mappings + [.init(type: type, from: from, to: to)])
     }
 
     func editMapping(type: PreferencesDataModel.MappingType, from: String, to: String, index: Int) {
-        PreferencesDataModel.mappingList.value.editMapping(.init(type: type, from: from, to: to), for: index)
+        PreferencesDataModel.mappingList.accept(mappings.enumerated().map { i, item in
+            i == index ? .init(type: type, from: from, to: to) : item
+        })
     }
 
     func removeMappings(_ mappings: [PreferencesDataModel.Mapping]) {
-        PreferencesDataModel.mappingList.value.removeMapping(mappings)
+        PreferencesDataModel.mappingList.accept(self.mappings.filter { item in
+            !mappings.contains(where: { $0 == item })
+        })
     }
 
     func exportSettings(to directoryURL: URL) throws {

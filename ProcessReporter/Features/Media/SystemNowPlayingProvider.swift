@@ -5,12 +5,12 @@ import AppKit
 import Foundation
 import os
 
-/// MediaInfoProvider backed by the system osascript runtime.
+/// System media reader backed by the system osascript runtime.
 ///
 /// Direct MediaRemote access from the app process is not reliable on newer
 /// macOS versions. The monitor path keeps a single system helper process alive
 /// and reads one JSON line per state change instead of spawning per poll.
-final class SystemNowPlayingProvider: MediaInfoProvider {
+final class SystemNowPlayingProvider {
   private struct NowPlayingPayload: Decodable {
     let title: String?
     let artist: String?

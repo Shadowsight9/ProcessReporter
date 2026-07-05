@@ -22,7 +22,6 @@ struct ReporterOptions {
 class Reporter {
 	private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ProcessReporter", category: "Reporter")
 	private var mapping = [String: ReporterOptions]()
-	private var statusBridge = ReporterStatusBridge()
 
 	// Add reporter extensions array
 	private var reporterExtensions: [ReporterExtension] = []
@@ -146,14 +145,14 @@ class Reporter {
 		await DataStore.shared.saveReport(reportValue)
 		let isAllFailed = successNames.isEmpty && !failures.isEmpty
 		if !isAllFailed {
-			statusBridge.updateLastSendProcessNameItem(data)
+			StatusMenuStore.shared.updateLastReport(data)
 		}
 
 		if failures.isEmpty {
-			statusBridge.updateStatus(.syncing)
+			StatusMenuStore.shared.status = .syncing
 			return .success(successNames)
 		} else {
-			statusBridge.updateStatus(isAllFailed ? .error : .partialError)
+			StatusMenuStore.shared.status = isAllFailed ? .error : .partialError
 			return .failure(.failure(failureNames))
 		}
 	}
@@ -231,7 +230,7 @@ class Reporter {
 			guard let self = self else { return }
 			if PreferencesDataModel.shared.enabledTypes.value.types.contains(.media) {
                                 guard let mediaInfo = mediaInfo else {
-                                        self.statusBridge.updateCurrentMediaItem(nil)
+                                        StatusMenuStore.shared.updateCurrentMedia(nil)
                                         return
                                 }
 
@@ -241,7 +240,7 @@ class Reporter {
 				)
 			}
 		}
-		statusBridge.updateStatus(.syncing)
+		StatusMenuStore.shared.status = .syncing
 	}
 
 	private var reporterInitializedTime: Date
@@ -285,14 +284,14 @@ class Reporter {
 
 		let enabledTypes = PreferencesDataModel.shared.enabledTypes.value.types
 		if enabledTypes.isEmpty {
-			statusBridge.updateStatus(.paused)
+			StatusMenuStore.shared.status = .paused
 			return
 		}
 		if !isNetworkAvailable() {
-			statusBridge.updateStatus(.offline)
+			StatusMenuStore.shared.status = .offline
 			return
 		} else {
-			statusBridge.updateStatus(.syncing)
+			StatusMenuStore.shared.status = .syncing
 		}
 
 		var dataModel = ReportModel(
@@ -317,7 +316,7 @@ class Reporter {
 			dataModel.setProcessInfo(windowInfo)
 		}
                 if enabledTypes.contains(.media) {
-                        statusBridge.updateCurrentMediaItem(mediaInfo)
+                        StatusMenuStore.shared.updateCurrentMedia(mediaInfo)
 		}
 
 		// Apply mapping rules to the data model before sending
@@ -334,7 +333,7 @@ class Reporter {
 		ApplicationMonitor.shared.stopWindowFocusMonitoring()
 		MediaInfoManager.stopMonitoringPlaybackChanges()
 
-		statusBridge.updateStatus(.paused)
+		StatusMenuStore.shared.status = .paused
 	}
 
 	private var timer: Timer?
@@ -362,21 +361,9 @@ class Reporter {
 	init() {
 		reporterInitializedTime = Date()
 
-		// Register all available extensions
-		initializeExtensions()
+		registerExtension(ShellReporterExtension())
 
 		subscribeSettingsChanged()
-	}
-
-	private func initializeExtensions() {
-		// Register all reporter extensions
-		let extensions: [ReporterExtension] = [
-			ShellReporterExtension(),
-		]
-
-		for ext in extensions {
-			registerExtension(ext)
-		}
 	}
 
 	deinit {
@@ -393,8 +380,8 @@ extension Reporter {
 
 	private func subscribeMappingSettingsChanged() {
 		let subscription = PreferencesDataModel.mappingList
-			.subscribeOnMain { [weak self] mappingList in
-				self?.mappingCache = mappingList.getList()
+			.subscribeOnMain { [weak self] mappings in
+				self?.mappingCache = mappings
 			}
 		subscriptions.append(subscription)
 	}

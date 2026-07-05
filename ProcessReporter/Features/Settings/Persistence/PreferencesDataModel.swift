@@ -20,7 +20,7 @@ class PreferencesDataModel {
             "ignoreNullArtist": PreferencesDataModel.ignoreNullArtist.value,
             "filteredProcesses": PreferencesDataModel.filteredProcesses.value,
             "filteredMediaProcesses": PreferencesDataModel.filteredMediaProcesses.value,
-            "mappingList": PreferencesDataModel.mappingList.value.toDictionary(),
+            "mappingList": PreferencesDataModel.mappingList.value.map { $0.toDictionary() },
         ]
     }
 
@@ -72,7 +72,7 @@ class PreferencesDataModel {
 			}
 
 			if let mapping = dictionary["mappingList"] as? [[String: Any]] {
-				PreferencesDataModel.mappingList.accept(MappingList.fromDictionary(mapping))
+				PreferencesDataModel.mappingList.accept(mapping.map { Mapping.fromDictionary($0) })
 			}
 
 			return true

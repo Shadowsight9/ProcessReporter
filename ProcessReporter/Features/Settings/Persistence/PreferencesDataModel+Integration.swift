@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct ShellIntegration: UserDefaultsJSONStorable, DictionaryConvertible {
+struct ShellIntegration: UserDefaultsJSONStorable {
     var isEnabled: Bool = false
     var command: String = ""
     var timeoutSeconds: Int = 10
@@ -22,6 +22,18 @@ extension PreferencesDataModel {
 }
 
 extension ShellIntegration {
+    func toDictionary() -> [String: Any] {
+        var dict: [String: Any] = [
+            "isEnabled": isEnabled,
+            "command": command,
+            "timeoutSeconds": timeoutSeconds,
+            "lastStdout": lastStdout,
+            "lastStderr": lastStderr,
+        ]
+        dict["lastExitCode"] = lastExitCode
+        return dict
+    }
+
     static func fromDictionary(_ dict: Any) -> ShellIntegration {
         guard let dict = dict as? [String: Any] else { return ShellIntegration() }
         var integration = ShellIntegration()

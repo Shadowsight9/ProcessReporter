@@ -175,7 +175,8 @@ Alamofire、Discord Game SDK、S3 helper 和服务专用集成已经移除。新
 - `ProcessReporter/Core/Reporter/Reporter+Shell.swift`
 - `ProcessReporter/Core/MediaInfoManager/MediaInfoManager.swift`
 - `ProcessReporter/Core/MediaInfoManager/LocalMediaInfoProvider.swift`
-- `ProcessReporter/Preferences/Views/PreferencesIntegrationShellView.swift`
+- `ProcessReporter/Preferences/Views/SettingsRootView.swift`
+- `ProcessReporter/UI/Status/StatusMenuView.swift`
 - `ProcessReporter/Core/Database/DataStore.swift`
 
 ## License

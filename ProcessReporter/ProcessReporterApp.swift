@@ -1,31 +1,39 @@
 import AppKit
+import SwiftUI
 
 var reporter: Reporter?
 
-func main() {
-    let app = NSApplication.shared
-    let delegate = AppDelegate()
-    app.delegate = delegate
+@main
+struct ProcessReporterApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @ObservedObject private var statusStore = StatusMenuStore.shared
 
-    Task { @MainActor in
-        do {
-            try await DataStore.shared.initialize()
-            reporter = Reporter()
-        } catch {
-            NSLog("Failed to initialize database: \(error)")
-            // Show alert to user
-            let alert = NSAlert()
-            alert.alertStyle = .critical
-            alert.messageText = "Database Initialization Failed"
-            alert.informativeText = error.localizedDescription
-            alert.addButton(withTitle: "Quit")
-            alert.runModal()
-            NSApplication.shared.terminate(nil)
+    init() {
+        setupMenu()
+        Task { @MainActor in
+            do {
+                try await DataStore.shared.initialize()
+                reporter = Reporter()
+            } catch {
+                let alert = NSAlert()
+                alert.alertStyle = .critical
+                alert.messageText = "Database Initialization Failed"
+                alert.informativeText = error.localizedDescription
+                alert.addButton(withTitle: "Quit")
+                alert.runModal()
+                NSApplication.shared.terminate(nil)
+            }
         }
     }
 
-    setupMenu()
-    _ = NSApplicationMain(CommandLine.argc, CommandLine.unsafeArgv)
+    var body: some Scene {
+        MenuBarExtra("ProcessReporter", systemImage: statusStore.systemImage) {
+            StatusMenuView()
+        }
+        Settings {
+            SettingsRootView()
+        }
+    }
 }
 
 private func setupMenu() {
@@ -96,5 +104,3 @@ private func makeEditMenu() -> NSMenuItem {
 
     return editMenuItem
 }
-
-main()

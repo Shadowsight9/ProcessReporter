@@ -175,7 +175,8 @@ Useful entry points:
 - `ProcessReporter/Core/Reporter/Reporter+Shell.swift`
 - `ProcessReporter/Core/MediaInfoManager/MediaInfoManager.swift`
 - `ProcessReporter/Core/MediaInfoManager/LocalMediaInfoProvider.swift`
-- `ProcessReporter/Preferences/Views/PreferencesIntegrationShellView.swift`
+- `ProcessReporter/Preferences/Views/SettingsRootView.swift`
+- `ProcessReporter/UI/Status/StatusMenuView.swift`
 - `ProcessReporter/Core/Database/DataStore.swift`
 
 ## License

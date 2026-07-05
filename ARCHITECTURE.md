@@ -12,7 +12,7 @@ The current design deliberately removes service-specific SDK integrations. The a
 4. `Reporter` applies filters and mapping rules from `PreferencesDataModel`.
 5. `Reporter` persists the report through `DataStore`.
 6. `ShellReporterExtension` exports the report as environment variables and executes the configured command.
-7. `ReporterStatusItemManager` updates the menu bar state and current activity display.
+7. `ReporterStatusItemManager` updates `StatusMenuStore`, which drives the SwiftUI `MenuBarExtra`.
 
 ## Main Components
 
@@ -24,16 +24,17 @@ The current design deliberately removes service-specific SDK integrations. The a
 - `ProcessReporter/Core/MediaInfoManager/LocalMediaInfoProvider.swift`: local MediaRemote-backed provider.
 - `ProcessReporter/Core/Database/DataStore.swift`: actor-isolated value API over SwiftData.
 - `ProcessReporter/Core/Database/Database.swift`: SwiftData container and background task support.
+- `ProcessReporter/ProcessReporterApp.swift`: SwiftUI app entry, `MenuBarExtra`, and Settings scene.
 - `ProcessReporter/Preferences/DataModels/`: persisted preferences.
-- `ProcessReporter/Preferences/Views/PreferencesIntegrationShellView.swift`: shell integration UI and manual test action.
+- `ProcessReporter/Preferences/Store/PreferencesStore.swift`: SwiftUI bridge over existing preference storage.
+- `ProcessReporter/Preferences/Views/SettingsRootView.swift`: SwiftUI settings UI.
+- `ProcessReporter/UI/Status/StatusMenuView.swift`: SwiftUI menu bar content.
 
 ## Shell Contract
 
 The configured command is executed as:
 
-```text
-/bin/zsh -lc "<configured command>"
-```
+The command runs through the user's `$SHELL -lc` when possible, with `/bin/zsh` as fallback.
 
 The command receives the current process environment plus the following variables:
 
@@ -61,8 +62,8 @@ Shell execution rules:
 - Reports with neither process nor media data are ignored.
 - Commands run off the main thread.
 - Commands have a configurable timeout.
-- On timeout, the app interrupts, terminates, then kills the shell process if needed.
-- stdout/stderr are captured and truncated before being stored in preferences.
+- On timeout, the app terminates the shell process.
+- stdout/stderr are captured before being stored in preferences.
 
 ## Media Provider
 
@@ -86,7 +87,7 @@ Future database changes should prefer explicit migration stages or a user-visibl
 
 ## Preferences
 
-Preferences currently use `UserDefaultsRelay` and RxSwift/RxCocoa bindings. The long-term direction is to move new preference state toward Swift-native Observation or a small `@MainActor` store, but this refactor keeps the existing bindings to avoid a broad UI rewrite.
+Settings are presented with SwiftUI. `PreferencesStore` bridges SwiftUI views to the existing `PreferencesDataModel`/`UserDefaultsRelay` persistence layer.
 
 Important safety rule:
 
@@ -94,7 +95,7 @@ Important safety rule:
 
 ## Concurrency
 
-- UI controllers and `Reporter` are main-actor oriented.
+- SwiftUI views, UI stores, and `Reporter` are main-actor oriented.
 - Database work is routed through actor-isolated `DataStore`/`Database` APIs.
 - Shell commands run in detached utility tasks.
 - Media fetches are serialized through `MediaInfoFetchActor`.

@@ -1,28 +1,6 @@
-//
-//  PreferencesMappingViewController.swift
-//  ProcessReporter
-//
-//  Created by Innei on 2025/4/21.
-//
-import AppKit
 import RxCocoa
 import RxSwift
-import SnapKit
 import SwiftUI
-
-class PreferencesMappingViewController: NSViewController, SettingWindowProtocol {
-	let frameSize: NSSize = .init(width: 600, height: 400)
-
-	convenience init() {
-		self.init(nibName: nil, bundle: nil)
-	}
-
-	override func loadView() {
-		view = NSHostingView(rootView: MappingView())
-	}
-
-	override func viewWillAppear() {}
-}
 
 class MappingViewModel: ObservableObject {
 	@Published var data: [PreferencesDataModel.Mapping] = []

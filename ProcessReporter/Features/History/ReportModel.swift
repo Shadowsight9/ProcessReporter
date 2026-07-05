@@ -14,6 +14,7 @@ class ReportModel {
     var id: UUID
 
     var processName: String?
+    var processDescription: String?
     var windowTitle: String?
     var timeStamp: Date
 
@@ -22,6 +23,7 @@ class ReportModel {
     var artist: String?
     var mediaName: String?
     var mediaProcessName: String?
+    var mediaProcessDescription: String?
     var mediaDuration: Double?
     var mediaElapsedTime: Double?
 
@@ -129,9 +131,11 @@ extension ReportModel {
             return """
                 ReportModel:
                   Process: \(processName ?? "N/A")
+                  Process Description: \(processDescription ?? "N/A")
                   Window: \(windowTitle ?? "N/A")
                   Media: \(mediaName ?? "N/A") by \(artist ?? "N/A")
                   Media Process: \(mediaProcessName ?? "N/A")
+                  Media Process Description: \(mediaProcessDescription ?? "N/A")
                   Duration: \(mediaDuration?.description ?? "N/A") / \(mediaElapsedTime?.description ?? "N/A")
                   Timestamp: \(timeStamp)
                   Integrations: \(integrations.joined(separator: ", "))

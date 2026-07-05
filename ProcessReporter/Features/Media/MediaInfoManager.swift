@@ -17,6 +17,8 @@ public class MediaInfoManager: NSObject {
 
   // Cache the latest media info to avoid synchronous CLI calls on the main thread
   private static var latestInfo: MediaInfo?
+  private static var latestInfoDate: Date?
+  private static let cacheMaxAge: TimeInterval = 2
 
   // Store the callback
   private static var playbackStateChangedCallback: PlaybackStateChangedCallback?
@@ -75,9 +77,14 @@ public class MediaInfoManager: NSObject {
   }
 
   public static func getMediaInfo() -> MediaInfo? {
+    if let cached = freshCachedInfo() {
+      return cached
+    }
+
     let info = provider.getMediaInfo(timeout: 3.0)
     if let info = info {
       latestInfo = info
+      latestInfoDate = Date()
     }
     return info
   }
@@ -86,11 +93,26 @@ public class MediaInfoManager: NSObject {
   public static func getMediaInfoAsync(timeout seconds: TimeInterval = 3.0) async throws
     -> MediaInfo?
   {
+    if let cached = freshCachedInfo() {
+      return cached
+    }
+
     let info = try await MediaInfoFetchActor.shared.requestInfo(using: provider, timeout: seconds)
     if let info = info {
       latestInfo = info
+      latestInfoDate = Date()
     }
     return info
+  }
+
+  private static func freshCachedInfo() -> MediaInfo? {
+    guard let latestInfo,
+          let latestInfoDate,
+          Date().timeIntervalSince(latestInfoDate) <= cacheMaxAge
+    else {
+      return nil
+    }
+    return latestInfo
   }
 
   private static func setupPlaybackSink(callback: @escaping PlaybackStateChangedCallback) {
@@ -100,6 +122,7 @@ public class MediaInfoManager: NSObject {
       .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
       .sink { info in
         latestInfo = info
+        latestInfoDate = info == nil ? nil : Date()
         callback(info)
       }
   }

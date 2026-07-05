@@ -15,19 +15,44 @@ enum SendError: Error {
 }
 
 struct ReporterOptions {
-	let onSend: (_ data: ReportModel) async -> Result<Void, ReporterError>
+	let onSend: (_ snapshot: ReportSnapshot) async -> Result<Void, ReporterError>
+}
+
+actor ReportDelivery {
+	func send(
+		snapshot: ReportSnapshot,
+		mapping: [String: ReporterOptions]
+	) async -> [(String, Result<Void, ReporterError>)] {
+		await withTaskGroup(of: (String, Result<Void, ReporterError>).self) { group in
+			for (name, options) in mapping {
+				group.addTask {
+					let result = await options.onSend(snapshot)
+					return (name, result)
+				}
+			}
+
+			var results = [(String, Result<Void, ReporterError>)]()
+			for await result in group {
+				results.append(result)
+			}
+			return results
+		}
+	}
 }
 
 @MainActor
 class Reporter {
 	private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ProcessReporter", category: "Reporter")
 	private var mapping = [String: ReporterOptions]()
+	private let delivery = ReportDelivery()
 
 	// Add reporter extensions array
 	private var reporterExtensions: [ReporterExtension] = []
 
-	private var cachedFilteredProcessAppNames = [String]()
-	private var cachedFilteredMediaAppNames = [String]()
+	private var cachedFilteredProcessBundleIDs = Set<String>()
+	private var cachedFilteredMediaBundleIDs = Set<String>()
+	private var lastReportFingerprint: String?
+	private var lastReportFingerprintDate: Date?
 	private var subscriptions: [RelaySubscription] = []
 
 	// Mapping cache
@@ -35,8 +60,10 @@ class Reporter {
 
 	// Clear all caches for memory cleanup
 	public func clearCaches() {
-		cachedFilteredProcessAppNames.removeAll()
-		cachedFilteredMediaAppNames.removeAll()
+		cachedFilteredProcessBundleIDs.removeAll()
+		cachedFilteredMediaBundleIDs.removeAll()
+		lastReportFingerprint = nil
+		lastReportFingerprintDate = nil
 		mappingCache.removeAll()
 	}
 
@@ -51,6 +78,9 @@ class Reporter {
 		if PreferencesDataModel.shared.isEnabled.value {
 			ApplicationMonitor.shared.startMouseMonitoring()
 			ApplicationMonitor.shared.startWindowFocusMonitoring()
+			if let info = ApplicationMonitor.shared.getFocusedWindowInfo() {
+				ForegroundUsageTracker.shared.focusChanged(to: info)
+			}
 		}
 
 		logger.info("Wake from sleep handling completed")
@@ -86,20 +116,9 @@ class Reporter {
 	}
 
 	public func send(data: ReportModel) async -> Result<[String], SendError> {
-		let results = await withTaskGroup(of: (String, Result<Void, ReporterError>).self) { group in
-			for (name, options) in mapping {
-				group.addTask {
-					let result = await options.onSend(data)
-					return (name, result)
-				}
-			}
-
-			var allResults = [(String, Result<Void, ReporterError>)]()
-			for await result in group {
-				allResults.append(result)
-			}
-			return allResults
-		}
+		let foregroundUsage = ForegroundUsageTracker.shared.snapshot(mappings: mappingCache)
+		let snapshot = ReportSnapshot(data, foregroundUsage: foregroundUsage)
+		let results = await delivery.send(snapshot: snapshot, mapping: mapping)
 
 		var successNames = [String]()
 		var failureNames = [String]()
@@ -128,21 +147,7 @@ class Reporter {
 		}
 
 		// Persist via DataStore (value-only, no SwiftData leakage)
-		data.integrations = successNames
-		let reportValue = ReportValue(
-			id: data.id,
-			processName: data.processName,
-			windowTitle: data.windowTitle,
-			timeStamp: data.timeStamp,
-			artist: data.artist,
-			mediaName: data.mediaName,
-			mediaProcessName: data.mediaProcessName,
-			mediaDuration: data.mediaDuration,
-			mediaElapsedTime: data.mediaElapsedTime,
-			mediaImageData: data.mediaImageData,
-			integrations: data.integrations
-		)
-		await DataStore.shared.saveReport(reportValue)
+		await DataStore.shared.saveReport(snapshot.reportValue(integrations: successNames))
 		let isAllFailed = successNames.isEmpty && !failures.isEmpty
 		if !isAllFailed {
 			StatusMenuStore.shared.updateLastReport(data)
@@ -169,7 +174,10 @@ class Reporter {
 			// Process application identifier mapping
 			for rule in mappingCache where rule.type == .processApplicationIdentifier {
 				if windowInfo.applicationIdentifier == rule.from {
-					windowInfo.applicationIdentifier = rule.to
+					if !rule.to.isEmpty {
+						windowInfo.applicationIdentifier = rule.to
+					}
+					data.processDescription = rule.description
 					break
 				}
 			}
@@ -177,8 +185,11 @@ class Reporter {
 			// Process name mapping
 			for rule in mappingCache where rule.type == .processName {
 				if windowInfo.appName == rule.from {
-					windowInfo.appName = rule.to
-					data.processName = rule.to
+					if !rule.to.isEmpty {
+						windowInfo.appName = rule.to
+						data.processName = rule.to
+					}
+					data.processDescription = rule.description
 					break
 				}
 			}
@@ -191,8 +202,11 @@ class Reporter {
 			// Media process application identifier mapping
 			for rule in mappingCache where rule.type == .mediaProcessApplicationIdentifier {
 				if mediaInfo.applicationIdentifier == rule.from {
-					mediaInfo.processName = rule.to
-					data.mediaProcessName = rule.to
+					if !rule.to.isEmpty {
+						mediaInfo.processName = rule.to
+						data.mediaProcessName = rule.to
+					}
+					data.mediaProcessDescription = rule.description
 					break
 				}
 			}
@@ -200,8 +214,11 @@ class Reporter {
 			// Media process name mapping
 			for rule in mappingCache where rule.type == .mediaProcessName {
 				if mediaInfo.processName == rule.from {
-					mediaInfo.processName = rule.to
-					data.mediaProcessName = rule.to
+					if !rule.to.isEmpty {
+						mediaInfo.processName = rule.to
+						data.mediaProcessName = rule.to
+					}
+					data.mediaProcessDescription = rule.description
 					break
 				}
 			}
@@ -219,11 +236,16 @@ class Reporter {
 		ApplicationMonitor.shared.startWindowFocusMonitoring(promptIfNeeded: promptForAccessibility)
 		ApplicationMonitor.shared.onWindowFocusChanged = { [weak self] info in
 			guard let self = self else { return }
+			ForegroundUsageTracker.shared.focusChanged(to: info)
 			if PreferencesDataModel.shared.reportOnFocusChange.value
 				&& PreferencesDataModel.shared.enabledTypes.value.types.contains(.process)
 			{
 				self.prepareSend(windowInfo: info)
 			}
+		}
+
+		if let info = ApplicationMonitor.shared.getFocusedWindowInfo() {
+			ForegroundUsageTracker.shared.focusChanged(to: info)
 		}
 
 		MediaInfoManager.startMonitoringPlaybackChanges { [weak self] mediaInfo in
@@ -275,7 +297,6 @@ class Reporter {
 			mediaInfo = try? await MediaInfoManager.getMediaInfoAsync(timeout: 3.0)
 		}
 
-		let appName = windowInfo.appName
 		let now = Date()
 		// Ignore the first 2 seconds after initialization to wait for the setting synchronization to complete
 		if now.timeIntervalSince(reporterInitializedTime) < 2 {
@@ -304,7 +325,7 @@ class Reporter {
 		if enabledTypes.contains(.media), let mediaInfo = mediaInfo, mediaInfo.playing {
 			// Filter media name
 
-			if !cachedFilteredMediaAppNames.contains(mediaInfo.processName),
+			if !cachedFilteredMediaBundleIDs.contains(mediaInfo.applicationIdentifier ?? ""),
 				!shouldIgnoreArtistNull
 					|| (mediaInfo.artist != nil && !mediaInfo.artist!.isEmpty)
 			{
@@ -312,7 +333,8 @@ class Reporter {
 			}
 		}
 		// Filter process name
-		if enabledTypes.contains(.process), !cachedFilteredProcessAppNames.contains(appName) {
+		if enabledTypes.contains(.process),
+		   !cachedFilteredProcessBundleIDs.contains(windowInfo.applicationIdentifier) {
 			dataModel.setProcessInfo(windowInfo)
 		}
                 if enabledTypes.contains(.media) {
@@ -321,14 +343,34 @@ class Reporter {
 
 		// Apply mapping rules to the data model before sending
 		applyMappingRules(to: &dataModel)
+		guard dataModel.hasProcessInfo || dataModel.hasMediaInfo else { return }
+		guard shouldSend(dataModel, now: now) else { return }
 
-		Task { @MainActor in
-			//            debugPrint(dataModel)
-			_ = await self.send(data: dataModel)
+		_ = await send(data: dataModel)
+	}
+
+	private func shouldSend(_ report: ReportModel, now: Date) -> Bool {
+		let fingerprint = ReportFingerprint.make(
+			processBundleID: report.processInfoRaw?.applicationIdentifier,
+			windowTitle: report.windowTitle,
+			mediaBundleID: report.mediaInfoRaw?.applicationIdentifier,
+			mediaName: report.mediaName,
+			isPlaying: report.mediaInfoRaw?.playing == true
+		)
+
+		if fingerprint == lastReportFingerprint,
+		   let lastDate = lastReportFingerprintDate,
+		   now.timeIntervalSince(lastDate) < 2 {
+			return false
 		}
+
+		lastReportFingerprint = fingerprint
+		lastReportFingerprintDate = now
+		return true
 	}
 
 	private func dispose() {
+		ForegroundUsageTracker.shared.pause()
 		ApplicationMonitor.shared.stopMouseMonitoring()
 		ApplicationMonitor.shared.stopWindowFocusMonitoring()
 		MediaInfoManager.stopMonitoringPlaybackChanges()
@@ -389,19 +431,11 @@ extension Reporter {
 	private func subscribeFilterSettingsChanged() {
 		let d1 = PreferencesDataModel.filteredProcesses
 			.subscribeOnMain { [weak self] appIds in
-				self?.cachedFilteredProcessAppNames.removeAll()
-				for appId in appIds {
-					let appInfo = AppUtility.shared.getAppInfo(for: appId)
-					self?.cachedFilteredProcessAppNames.append(appInfo.displayName)
-				}
+				self?.cachedFilteredProcessBundleIDs = Set(appIds)
 			}
 		let d2 = PreferencesDataModel.filteredMediaProcesses
 			.subscribeOnMain { [weak self] appIds in
-				self?.cachedFilteredMediaAppNames.removeAll()
-				for appId in appIds {
-					let appInfo = AppUtility.shared.getAppInfo(for: appId)
-					self?.cachedFilteredMediaAppNames.append(appInfo.displayName)
-				}
+				self?.cachedFilteredMediaBundleIDs = Set(appIds)
 			}
 		subscriptions.append(contentsOf: [d1, d2])
 	}

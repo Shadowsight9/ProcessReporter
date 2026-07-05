@@ -5,10 +5,15 @@
 //  Created by Innei on 2025/4/10.
 //
 import Foundation
+import os
 import SwiftData
 
 actor Database {
     static let shared = Database()
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "ProcessReporter",
+        category: "Database"
+    )
     private var modelContainer: ModelContainer?
 
     // Main context for UI operations
@@ -52,7 +57,7 @@ actor Database {
         let directoryURL = appSupportURL.appendingPathComponent(bundleID)
         let fileURL = directoryURL.appendingPathComponent("db.store")
 
-        debugPrint("Database location: \(fileURL)")
+        Self.logger.info("Database location: \(fileURL.path, privacy: .public)")
 
         // Create schema
         let schema = Schema([ReportModel.self, IconModel.self])
@@ -71,11 +76,11 @@ actor Database {
                 migrationPlan: MigrationPlan.self,
                 configurations: configuration
             )
-            print("Database initialized successfully with migration plan")
+            Self.logger.info("Database initialized successfully with migration plan")
         } catch {
             // If migration fails, remove the old database and create a new one
-            print("Migration failed with error: \(error)")
-            print("Removing old database and creating new one...")
+            Self.logger.error("Migration failed: \(error.localizedDescription)")
+            Self.logger.info("Removing old database and creating new one")
 
             do {
                 try? fileManager.removeItem(at: fileURL)
@@ -85,9 +90,9 @@ actor Database {
                     for: schema,
                     configurations: configuration
                 )
-                print("Database initialized successfully with fresh start")
+                Self.logger.info("Database initialized successfully with fresh start")
             } catch {
-                print("Failed to create fresh database: \(error)")
+                Self.logger.error("Failed to create fresh database: \(error.localizedDescription)")
                 throw DatabaseError.migrationFailed(
                     "Failed to create database: \(error.localizedDescription)")
             }

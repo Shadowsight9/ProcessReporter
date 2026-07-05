@@ -78,9 +78,12 @@ class ApplicationMonitor {
             return nil
         }
 
-        guard let mainWindow = mainWindowValue as! AXUIElement? else {
+        guard let mainWindowValue,
+              CFGetTypeID(mainWindowValue) == AXUIElementGetTypeID()
+        else {
             return nil
         }
+        let mainWindow = mainWindowValue as! AXUIElement
 
         var titleValue: CFTypeRef?
         let titleResult = AXUIElementCopyAttributeValue(

@@ -74,6 +74,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    @MainActor
     @objc private func willSleep() {
         logger.info("System will sleep - cleaning up caches")
         cleanupCachesBeforeSleep()
@@ -84,7 +85,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         reinitializeAfterWake()
     }
 
+    @MainActor
     private func cleanupCachesBeforeSleep() {
+        ForegroundUsageTracker.shared.pause()
+
         // Clean up app info cache with icons (can be memory-heavy)
         AppUtility.shared.clearCache()
 

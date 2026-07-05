@@ -4,6 +4,7 @@ import Darwin
 private struct ShellReportPayload: Codable {
     struct ProcessPayload: Codable {
         var name: String
+        var description: String
         var windowTitle: String
         var bundleIdentifier: String
     }
@@ -13,6 +14,7 @@ private struct ShellReportPayload: Codable {
         var artist: String
         var album: String
         var processName: String
+        var processDescription: String
         var bundleIdentifier: String
         var duration: Double
         var elapsedTime: Double
@@ -22,6 +24,7 @@ private struct ShellReportPayload: Codable {
     var timestamp: String
     var process: ProcessPayload
     var media: MediaPayload
+    var foregroundUsage: ForegroundUsageSnapshot
 }
 
 private struct ShellCommandResult {
@@ -115,33 +118,46 @@ class ShellReporterExtension: ReporterExtension {
     }
 
     func createReporterOptions() -> ReporterOptions {
-        ReporterOptions { data in
-            await Self.send(data: data, requireEnabled: true)
+        ReporterOptions { snapshot in
+            await Self.send(snapshot: snapshot, requireEnabled: true)
         }
     }
 
     static func send(data: ReportModel, requireEnabled: Bool) async -> Result<Void, ReporterError> {
-        let config = PreferencesDataModel.shellIntegration.value
+        let foregroundUsage = await MainActor.run {
+            ForegroundUsageTracker.shared.snapshot(mappings: PreferencesDataModel.mappingList.value)
+        }
+        return await send(
+            snapshot: ReportSnapshot(data, foregroundUsage: foregroundUsage),
+            requireEnabled: requireEnabled
+        )
+    }
+
+    static func send(snapshot: ReportSnapshot, requireEnabled: Bool) async -> Result<Void, ReporterError> {
+        let config = PreferencesDataModel.shellIntegration.value.sanitized()
+        let slotIndex = config.normalizedSelectedSlotIndex
+        let slot = config.selectedSlot
         guard config.isEnabled || !requireEnabled else { return .failure(.ignored) }
-        guard !config.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !slot.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .failure(.ignored)
         }
-        guard data.hasProcessInfo || data.hasMediaInfo else {
+        guard snapshot.hasProcessInfo || snapshot.hasMediaInfo else {
             return .failure(.ignored)
         }
 
-        let environment = makeEnvironment(data: data)
+        let environment = makeEnvironment(snapshot: snapshot)
         let result = await ShellCommandRunner.run(
-            command: config.command,
-            timeoutSeconds: config.timeoutSeconds,
+            command: slot.command,
+            timeoutSeconds: slot.timeoutSeconds,
             environment: environment
         )
 
         await MainActor.run {
-            var latest = PreferencesDataModel.shellIntegration.value
-            latest.lastExitCode = result.exitCode
-            latest.lastStdout = result.stdout
-            latest.lastStderr = result.stderr
+            var latest = PreferencesDataModel.shellIntegration.value.sanitized()
+            guard latest.slots.indices.contains(slotIndex) else { return }
+            latest.slots[slotIndex].lastExitCode = result.exitCode
+            latest.slots[slotIndex].lastStdout = result.stdout
+            latest.slots[slotIndex].lastStderr = result.stderr
             PreferencesDataModel.shellIntegration.accept(latest)
         }
 
@@ -149,51 +165,62 @@ class ShellReporterExtension: ReporterExtension {
             return .success(())
         }
         if result.timedOut {
-            return .failure(.networkError("Shell command timed out after \(config.timeoutSeconds)s"))
+            return .failure(.networkError("Shell command timed out after \(slot.timeoutSeconds)s"))
         }
         return .failure(.networkError("Shell command exited with \(result.exitCode)"))
     }
 
-    private static func makeEnvironment(data: ReportModel) -> [String: String] {
-        let processBundleID = data.processInfoRaw?.applicationIdentifier ?? ""
-        let mediaBundleID = data.mediaInfoRaw?.applicationIdentifier ?? ""
-        let playing = data.mediaInfoRaw?.playing == true ? "true" : "false"
+    private static func makeEnvironment(snapshot: ReportSnapshot) -> [String: String] {
+        let processBundleID = snapshot.processBundleID ?? ""
+        let mediaBundleID = snapshot.mediaBundleID ?? ""
+        let playing = snapshot.mediaPlaying ? "true" : "false"
 
         let payload = ShellReportPayload(
-            timestamp: iso8601.string(from: data.timeStamp),
+            timestamp: iso8601.string(from: snapshot.timeStamp),
             process: .init(
-                name: data.processName ?? "",
-                windowTitle: data.windowTitle ?? "",
+                name: snapshot.processName ?? "",
+                description: snapshot.processDescription ?? "",
+                windowTitle: snapshot.windowTitle ?? "",
                 bundleIdentifier: processBundleID
             ),
             media: .init(
-                name: data.mediaName ?? "",
-                artist: data.artist ?? "",
-                album: data.mediaInfoRaw?.album ?? "",
-                processName: data.mediaProcessName ?? "",
+                name: snapshot.mediaName ?? "",
+                artist: snapshot.artist ?? "",
+                album: snapshot.mediaAlbum ?? "",
+                processName: snapshot.mediaProcessName ?? "",
+                processDescription: snapshot.mediaProcessDescription ?? "",
                 bundleIdentifier: mediaBundleID,
-                duration: data.mediaDuration ?? 0,
-                elapsedTime: data.mediaElapsedTime ?? 0,
-                playing: data.mediaInfoRaw?.playing == true
-            )
+                duration: snapshot.mediaDuration ?? 0,
+                elapsedTime: snapshot.mediaElapsedTime ?? 0,
+                playing: snapshot.mediaPlaying
+            ),
+            foregroundUsage: snapshot.foregroundUsage
         )
 
         let jsonData = (try? jsonEncoder.encode(payload)) ?? Data("{}".utf8)
         let json = String(data: jsonData, encoding: .utf8) ?? "{}"
+        let foregroundUsageData = (try? jsonEncoder.encode(snapshot.foregroundUsage)) ?? Data("{}".utf8)
+        let foregroundUsageJSON = String(data: foregroundUsageData, encoding: .utf8) ?? "{}"
 
         return [
-            "PROCESS_REPORTER_PROCESS_NAME": data.processName ?? "",
-            "PROCESS_REPORTER_WINDOW_TITLE": data.windowTitle ?? "",
+            "PROCESS_REPORTER_PROCESS_NAME": snapshot.processName ?? "",
+            "PROCESS_REPORTER_PROCESS_DESCRIPTION": snapshot.processDescription ?? "",
+            "PROCESS_REPORTER_PROCESS_DAILY_FOREGROUND_DURATION": String(
+                snapshot.foregroundUsage.duration(forBundleIdentifier: snapshot.processBundleID)
+            ),
+            "PROCESS_REPORTER_WINDOW_TITLE": snapshot.windowTitle ?? "",
             "PROCESS_REPORTER_PROCESS_BUNDLE_ID": processBundleID,
-            "PROCESS_REPORTER_MEDIA_NAME": data.mediaName ?? "",
-            "PROCESS_REPORTER_MEDIA_ARTIST": data.artist ?? "",
-            "PROCESS_REPORTER_MEDIA_ALBUM": data.mediaInfoRaw?.album ?? "",
-            "PROCESS_REPORTER_MEDIA_PROCESS_NAME": data.mediaProcessName ?? "",
+            "PROCESS_REPORTER_MEDIA_NAME": snapshot.mediaName ?? "",
+            "PROCESS_REPORTER_MEDIA_ARTIST": snapshot.artist ?? "",
+            "PROCESS_REPORTER_MEDIA_ALBUM": snapshot.mediaAlbum ?? "",
+            "PROCESS_REPORTER_MEDIA_PROCESS_NAME": snapshot.mediaProcessName ?? "",
+            "PROCESS_REPORTER_MEDIA_PROCESS_DESCRIPTION": snapshot.mediaProcessDescription ?? "",
             "PROCESS_REPORTER_MEDIA_PROCESS_BUNDLE_ID": mediaBundleID,
-            "PROCESS_REPORTER_MEDIA_DURATION": String(data.mediaDuration ?? 0),
-            "PROCESS_REPORTER_MEDIA_ELAPSED_TIME": String(data.mediaElapsedTime ?? 0),
+            "PROCESS_REPORTER_MEDIA_DURATION": String(snapshot.mediaDuration ?? 0),
+            "PROCESS_REPORTER_MEDIA_ELAPSED_TIME": String(snapshot.mediaElapsedTime ?? 0),
             "PROCESS_REPORTER_MEDIA_PLAYING": playing,
-            "PROCESS_REPORTER_TIMESTAMP": iso8601.string(from: data.timeStamp),
+            "PROCESS_REPORTER_FOREGROUND_USAGE_JSON": foregroundUsageJSON,
+            "PROCESS_REPORTER_TIMESTAMP": iso8601.string(from: snapshot.timeStamp),
             "PROCESS_REPORTER_JSON": json,
         ]
     }

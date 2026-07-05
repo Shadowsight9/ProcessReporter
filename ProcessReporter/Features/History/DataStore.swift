@@ -8,17 +8,20 @@
 import Foundation
 import SwiftData
 import AppKit
+import os
 
 // Value object used to persist reports without exposing SwiftData models
 struct ReportValue {
     var id: UUID
     var processName: String?
+    var processDescription: String?
     var windowTitle: String?
     var timeStamp: Date
 
     var artist: String?
     var mediaName: String?
     var mediaProcessName: String?
+    var mediaProcessDescription: String?
     var mediaDuration: Double?
     var mediaElapsedTime: Double?
     var mediaImageData: Data?
@@ -37,6 +40,10 @@ struct IconValue {
 // Centralized store that is the only place allowed to touch SwiftData
 actor DataStore {
     static let shared = DataStore()
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "ProcessReporter",
+        category: "DataStore"
+    )
 
     // Maximum number of reports to keep (roughly ~10MB with typical report sizes)
     private let maxReportCount = 5000
@@ -60,7 +67,7 @@ actor DataStore {
                 return results.first?.url
             }
         } catch {
-            NSLog("iconURL lookup failed: \(error.localizedDescription)")
+            Self.logger.error("iconURL lookup failed: \(error.localizedDescription)")
             return nil
         }
     }
@@ -104,11 +111,13 @@ actor DataStore {
                 // Copy fields
                 model.id = report.id
                 model.processName = report.processName
+                model.processDescription = report.processDescription
                 model.windowTitle = report.windowTitle
                 model.timeStamp = report.timeStamp
                 model.artist = report.artist
                 model.mediaName = report.mediaName
                 model.mediaProcessName = report.mediaProcessName
+                model.mediaProcessDescription = report.mediaProcessDescription
                 model.mediaDuration = report.mediaDuration
                 model.mediaElapsedTime = report.mediaElapsedTime
                 model.mediaImageData = report.mediaImageData
@@ -117,7 +126,7 @@ actor DataStore {
                 try context.save()
             }
         } catch {
-            NSLog("Failed to save report: \(error.localizedDescription)")
+            Self.logger.error("Failed to save report: \(error.localizedDescription)")
             return
         }
         NotificationCenter.default.post(name: DataStore.changedNotification, object: nil)
@@ -145,7 +154,7 @@ actor DataStore {
                 return models.map { IconValue(name: $0.name, applicationIdentifier: $0.applicationIdentifier, url: $0.url, createdAt: $0.createdAt, updatedAt: $0.updatedAt) }
             }
         } catch {
-            NSLog("fetchIconsSorted failed: \(error.localizedDescription)")
+            Self.logger.error("fetchIconsSorted failed: \(error.localizedDescription)")
             return []
         }
     }
@@ -172,25 +181,29 @@ actor DataStore {
             return try await Database.shared.performBackgroundTask { context in
                 let sort = [SortDescriptor<ReportModel>(\.timeStamp, order: ascending ? .forward : .reverse)]
                 if let q = searchText, !q.isEmpty {
-                    // Fetch all, filter in memory, then paginate (keeps simplicity and avoids predicate portability issues)
-                    let all = try context.fetch(FetchDescriptor<ReportModel>(sortBy: sort))
-                    let lowercased = q.lowercased()
-                    let filtered = all.filter { m in
-                        if let pn = m.processName?.lowercased(), pn.contains(lowercased) { return true }
-                        if let mn = m.mediaName?.lowercased(), mn.contains(lowercased) { return true }
-                        if let ar = m.artist?.lowercased(), ar.contains(lowercased) { return true }
-                        return false
-                    }
-                    let slice = filtered.dropFirst(offset).prefix(limit)
-                    return slice.map { m in
+                    let descriptor = FetchDescriptor<ReportModel>(
+                        predicate: #Predicate<ReportModel> { report in
+                            report.processName?.localizedStandardContains(q) == true
+                                || report.mediaName?.localizedStandardContains(q) == true
+                                || report.artist?.localizedStandardContains(q) == true
+                        },
+                        sortBy: sort
+                    )
+                    var pageDescriptor = descriptor
+                    pageDescriptor.fetchOffset = offset
+                    pageDescriptor.fetchLimit = limit
+                    let page = try context.fetch(pageDescriptor)
+                    return page.map { m in
                         ReportValue(
                             id: m.id,
                             processName: m.processName,
+                            processDescription: m.processDescription,
                             windowTitle: m.windowTitle,
                             timeStamp: m.timeStamp,
                             artist: m.artist,
                             mediaName: m.mediaName,
                             mediaProcessName: m.mediaProcessName,
+                            mediaProcessDescription: m.mediaProcessDescription,
                             mediaDuration: m.mediaDuration,
                             mediaElapsedTime: m.mediaElapsedTime,
                             mediaImageData: m.mediaImageData,
@@ -206,11 +219,13 @@ actor DataStore {
                         ReportValue(
                             id: m.id,
                             processName: m.processName,
+                            processDescription: m.processDescription,
                             windowTitle: m.windowTitle,
                             timeStamp: m.timeStamp,
                             artist: m.artist,
                             mediaName: m.mediaName,
                             mediaProcessName: m.mediaProcessName,
+                            mediaProcessDescription: m.mediaProcessDescription,
                             mediaDuration: m.mediaDuration,
                             mediaElapsedTime: m.mediaElapsedTime,
                             mediaImageData: m.mediaImageData,
@@ -220,7 +235,7 @@ actor DataStore {
                 }
             }
         } catch {
-            NSLog("fetchReports failed: \(error.localizedDescription)")
+            Self.logger.error("fetchReports failed: \(error.localizedDescription)")
             return []
         }
     }
@@ -274,11 +289,11 @@ actor DataStore {
             }
 
             if deletedCount > 0 {
-                NSLog("Cleaned up \(deletedCount) old reports")
+                Self.logger.info("Cleaned up \(deletedCount, privacy: .public) old reports")
                 NotificationCenter.default.post(name: DataStore.changedNotification, object: nil)
             }
         } catch {
-            NSLog("Failed to cleanup old reports: \(error.localizedDescription)")
+            Self.logger.error("Failed to cleanup old reports: \(error.localizedDescription)")
         }
     }
 
@@ -289,7 +304,7 @@ actor DataStore {
                 return try context.fetchCount(descriptor)
             }
         } catch {
-            NSLog("getReportCount failed: \(error.localizedDescription)")
+            Self.logger.error("getReportCount failed: \(error.localizedDescription)")
             return 0
         }
     }

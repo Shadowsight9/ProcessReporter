@@ -72,7 +72,7 @@ class PreferencesDataModel {
 			}
 
 			if let mapping = dictionary["mappingList"] as? [[String: Any]] {
-				PreferencesDataModel.mappingList.accept(mapping.map { Mapping.fromDictionary($0) })
+				PreferencesDataModel.mappingList.accept(mapping.compactMap { Mapping.fromDictionary($0) })
 			}
 
 			return true

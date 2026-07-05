@@ -13,8 +13,9 @@ extension PreferencesDataModel {
 
 extension PreferencesDataModel {
 	enum MappingType: String, CaseIterable, UserDefaultsJSONStorable {
-		static func fromDictionary(_ dict: Any) -> MappingType {
-			return self.init(rawValue: dict as! String) ?? .processApplicationIdentifier
+		static func fromDictionary(_ dict: Any) -> MappingType? {
+			guard let value = dict as? String else { return nil }
+			return self.init(rawValue: value)
 		}
 	 
 		static func fromStorable(_ value: Any?) -> MappingType? {
@@ -46,32 +47,44 @@ extension PreferencesDataModel {
 	}
 
 	struct Mapping: UserDefaultsJSONStorable, Identifiable {
-		var id: String {
-			"\(from)-\(to)-\(type.rawValue)"
-		}
+		let id: String
 		
-		static func fromDictionary(_ dict: Any) -> Mapping {
-			let dict = dict as! [String: Any]
-			let type = MappingType.fromDictionary(dict["type"]!)
-			let from = dict["from"] as! String
-			let to = dict["to"] as! String
-			return Mapping(type: type, from: from, to: to)
+		static func fromDictionary(_ dict: Any) -> Mapping? {
+			guard let parsed = MappingDictionaryParser.parse(dict),
+			      let type = MappingType.fromDictionary(parsed.type)
+			else {
+				return nil
+			}
+			return Mapping(
+				id: parsed.id ?? UUID().uuidString,
+				type: type,
+				from: parsed.from,
+				to: parsed.to,
+				description: parsed.description
+			)
 		}
 
 		func toDictionary() -> [String: Any] {
 			[
+				"id": id,
 				"type": type.rawValue,
 				"from": from,
 				"to": to,
+				"description": description,
 			]
 		}
 	 
 		let type: MappingType
 		let from: String
 		let to: String
+		let description: String
 		
 		static func == (lhs: Mapping, rhs: Mapping) -> Bool {
-			return lhs.type == rhs.type && lhs.from == rhs.from && lhs.to == rhs.to
+			return lhs.id == rhs.id
+				&& lhs.type == rhs.type
+				&& lhs.from == rhs.from
+				&& lhs.to == rhs.to
+				&& lhs.description == rhs.description
 		}
 	}
 
@@ -84,6 +97,6 @@ extension Array: UserDefaultsStorable where Element == PreferencesDataModel.Mapp
 
 	static func fromStorable(_ value: Any?) -> [PreferencesDataModel.Mapping]? {
 		guard let value = value as? [[String: Any]] else { return nil }
-		return value.map { PreferencesDataModel.Mapping.fromDictionary($0) }
+		return value.compactMap { PreferencesDataModel.Mapping.fromDictionary($0) }
 	}
 }

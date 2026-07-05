@@ -5,20 +5,25 @@ struct ShellIntegrationSettingsView: View {
     @ObservedObject var store: PreferencesStore
     @State private var draft = PreferencesDataModel.shellIntegration.value
     @State private var isTesting = false
+    @State private var environmentVariablesExpanded = false
 
     private let environmentVariables = [
         "PROCESS_REPORTER_JSON",
         "PROCESS_REPORTER_PROCESS_NAME",
+        "PROCESS_REPORTER_PROCESS_DESCRIPTION",
+        "PROCESS_REPORTER_PROCESS_DAILY_FOREGROUND_DURATION",
         "PROCESS_REPORTER_WINDOW_TITLE",
         "PROCESS_REPORTER_PROCESS_BUNDLE_ID",
         "PROCESS_REPORTER_MEDIA_NAME",
         "PROCESS_REPORTER_MEDIA_ARTIST",
         "PROCESS_REPORTER_MEDIA_ALBUM",
         "PROCESS_REPORTER_MEDIA_PROCESS_NAME",
+        "PROCESS_REPORTER_MEDIA_PROCESS_DESCRIPTION",
         "PROCESS_REPORTER_MEDIA_PROCESS_BUNDLE_ID",
         "PROCESS_REPORTER_MEDIA_DURATION",
         "PROCESS_REPORTER_MEDIA_ELAPSED_TIME",
         "PROCESS_REPORTER_MEDIA_PLAYING",
+        "PROCESS_REPORTER_FOREGROUND_USAGE_JSON",
         "PROCESS_REPORTER_TIMESTAMP",
     ]
 
@@ -84,7 +89,7 @@ struct ShellIntegrationSettingsView: View {
     private var commandEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Command", systemImage: "terminal")
+                Label("Command \(selectedSlot.id + 1)", systemImage: "terminal")
                     .font(.headline)
                 Spacer()
                 
@@ -92,8 +97,8 @@ struct ShellIntegrationSettingsView: View {
                    TextField(
                        "Seconds",
                        value: Binding(
-                           get: { draft.timeoutSeconds },
-                           set: { draft.timeoutSeconds = min(max($0, 1), 300) }
+                           get: { selectedSlot.timeoutSeconds },
+                           set: { setSelectedSlotTimeout($0) }
                        ),
                        format: .number
                    )
@@ -113,13 +118,16 @@ struct ShellIntegrationSettingsView: View {
                             .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
                     )
 
-                TextEditor(text: $draft.command)
+                TextEditor(text: Binding(
+                    get: { selectedSlot.command },
+                    set: { setSelectedSlotCommand($0) }
+                ))
                     .font(.system(size: 12, design: .monospaced))
                     .scrollContentBackground(.hidden)
                     .padding(8)
                     .frame(minHeight: 120)
 
-                if draft.command.isEmpty {
+                if selectedSlot.command.isEmpty {
                     Text("curl -X POST \"https://example.com/report\" -H \"Content-Type: application/json\" -d \"$PROCESS_REPORTER_JSON\"")
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(.tertiary)
@@ -128,28 +136,78 @@ struct ShellIntegrationSettingsView: View {
                         .allowsHitTesting(false)
                 }
             }
+
+            slotPicker
+        }
+    }
+
+    private var slotPicker: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<ShellIntegration.slotCount, id: \.self) { index in
+                Button {
+                    draft.selectedSlotIndex = index
+                    draft = draft.sanitized()
+                } label: {
+                    Text("\(index + 1)")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .monospacedDigit()
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(draft.normalizedSelectedSlotIndex == index ? .white : .primary)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(draft.normalizedSelectedSlotIndex == index ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Command slot \(index + 1)")
+            }
         }
     }
 
     private var environmentVariableGrid: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("Environment Variables", systemImage: "curlybraces")
-                    .font(.headline)
-                Spacer()
-                Button {
-                    copy(environmentVariables.map { "$" + $0 }.joined(separator: "\n"))
-                } label: {
-                    Label("Copy All", systemImage: "doc.on.doc")
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
+                    environmentVariablesExpanded.toggle()
                 }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 12)
+                        .rotationEffect(.degrees(environmentVariablesExpanded ? 90 : 0))
+                    Label("Environment Variables", systemImage: "curlybraces")
+                        .font(.headline)
+                    Text("\(environmentVariables.count)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                }
+                .animation(.snappy(duration: 0.2, extraBounce: 0), value: environmentVariablesExpanded)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 245), spacing: 8)], alignment: .leading, spacing: 8) {
-                ForEach(environmentVariables, id: \.self) { variable in
-                    EnvironmentVariableButton(variable: variable) {
-                        copy("$" + variable)
+            if environmentVariablesExpanded {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 210), spacing: 6)],
+                    alignment: .leading,
+                    spacing: 6
+                ) {
+                    ForEach(environmentVariables, id: \.self) { variable in
+                        EnvironmentVariableButton(variable: variable) {
+                            copy("$" + variable)
+                        }
                     }
                 }
+                .transition(.opacity)
             }
         }
     }
@@ -160,20 +218,38 @@ struct ShellIntegrationSettingsView: View {
                 Label("Last Result", systemImage: "checklist")
                     .font(.headline)
                 Spacer()
-                Text(draft.lastExitCode.map { "Exit \($0)" } ?? "Not tested")
+                Text(selectedSlot.lastExitCode.map { "Exit \($0)" } ?? "Not tested")
                     .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(draft.lastExitCode == 0 ? .green : .secondary)
+                    .foregroundStyle(selectedSlot.lastExitCode == 0 ? .green : .secondary)
             }
 
             HStack(alignment: .top, spacing: 12) {
-                outputView(title: "Stdout", text: draft.lastStdout)
-                outputView(title: "Stderr", text: draft.lastStderr)
+                outputView(title: "Stdout", text: selectedSlot.lastStdout)
+                outputView(title: "Stderr", text: selectedSlot.lastStderr)
             }
         }
     }
 
     private var commandIsEmpty: Bool {
-        draft.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        selectedSlot.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var selectedSlot: ShellCommandSlot {
+        draft.sanitized().selectedSlot
+    }
+
+    private func setSelectedSlotCommand(_ command: String) {
+        draft = draft.sanitized()
+        let index = draft.normalizedSelectedSlotIndex
+        guard draft.slots.indices.contains(index) else { return }
+        draft.slots[index].command = command
+    }
+
+    private func setSelectedSlotTimeout(_ timeoutSeconds: Int) {
+        draft = draft.sanitized()
+        let index = draft.normalizedSelectedSlotIndex
+        guard draft.slots.indices.contains(index) else { return }
+        draft.slots[index].timeoutSeconds = min(max(timeoutSeconds, 1), 300)
     }
 
     private func outputView(title: String, text: String) -> some View {
@@ -211,8 +287,9 @@ private struct EnvironmentVariableButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "doc.on.doc")
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                 Text("$" + variable)
                     .font(.system(.caption, design: .monospaced))
@@ -220,13 +297,13 @@ private struct EnvironmentVariableButton: View {
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 5)
                     .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
             )
         }

@@ -16,7 +16,7 @@ ProcessReporter is a macOS menu bar app for recording focused applications, acti
 - Tracks focused applications and window titles.
 - Reads system now-playing metadata through a local Swift provider.
 - Stores activity history locally with SwiftData.
-- Sends reports through one configurable shell command.
+- Sends reports through one of four configurable shell command slots.
 - Supports application filters and mapping rules for privacy-friendly reporting.
 - Runs as a lightweight menu bar utility.
 
@@ -58,7 +58,7 @@ ProcessReporter has one built-in external integration: Shell.
 
 1. Open Preferences -> Integrations.
 2. Enable Shell.
-3. Enter a command.
+3. Pick a command slot and enter a command.
 4. Set a timeout.
 5. Use Test to inspect the latest exit code, stdout, and stderr.
 
@@ -77,7 +77,7 @@ mkdir -p /tmp/process-reporter-test
 printf '%s\n' "$PROCESS_REPORTER_JSON" >> /tmp/process-reporter-test/reports.jsonl
 ```
 
-The command runs locally through `/bin/zsh -lc` with the app user's permissions. Imported shell commands are forced disabled until you explicitly enable them.
+The selected command slot runs locally through `/bin/zsh -lc` with the app user's permissions. Imported shell commands are forced disabled until you explicitly enable them.
 
 ## Shell Environment
 
@@ -85,16 +85,20 @@ Every shell report receives these environment variables. Missing values are pass
 
 - `PROCESS_REPORTER_JSON`
 - `PROCESS_REPORTER_PROCESS_NAME`
+- `PROCESS_REPORTER_PROCESS_DESCRIPTION`
+- `PROCESS_REPORTER_PROCESS_DAILY_FOREGROUND_DURATION`
 - `PROCESS_REPORTER_WINDOW_TITLE`
 - `PROCESS_REPORTER_PROCESS_BUNDLE_ID`
 - `PROCESS_REPORTER_MEDIA_NAME`
 - `PROCESS_REPORTER_MEDIA_ARTIST`
 - `PROCESS_REPORTER_MEDIA_ALBUM`
 - `PROCESS_REPORTER_MEDIA_PROCESS_NAME`
+- `PROCESS_REPORTER_MEDIA_PROCESS_DESCRIPTION`
 - `PROCESS_REPORTER_MEDIA_PROCESS_BUNDLE_ID`
 - `PROCESS_REPORTER_MEDIA_DURATION`
 - `PROCESS_REPORTER_MEDIA_ELAPSED_TIME`
 - `PROCESS_REPORTER_MEDIA_PLAYING`
+- `PROCESS_REPORTER_FOREGROUND_USAGE_JSON`
 - `PROCESS_REPORTER_TIMESTAMP`
 
 `PROCESS_REPORTER_JSON` has this shape:
@@ -104,6 +108,7 @@ Every shell report receives these environment variables. Missing values are pass
   "timestamp": "2026-07-05T12:00:00.000Z",
   "process": {
     "name": "Code",
+    "description": "Writing code",
     "windowTitle": "ProcessReporter",
     "bundleIdentifier": "com.microsoft.VSCode"
   },
@@ -112,10 +117,24 @@ Every shell report receives these environment variables. Missing values are pass
     "artist": "Artist",
     "album": "Album",
     "processName": "Music",
+    "processDescription": "Listening to music",
     "bundleIdentifier": "com.apple.Music",
     "duration": 240,
     "elapsedTime": 42,
     "playing": true
+  },
+  "foregroundUsage": {
+    "date": "2026-07-05",
+    "apps": [
+      {
+        "bundleIdentifier": "com.microsoft.VSCode",
+        "name": "Code",
+        "description": "Writing code",
+        "duration": 3600
+      }
+    ],
+    "totalDuration": 3600,
+    "currentBundleIdentifier": "com.microsoft.VSCode"
   }
 }
 ```

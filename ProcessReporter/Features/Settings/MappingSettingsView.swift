@@ -33,7 +33,11 @@ struct MappingSettingsView: View {
 						.lineLimit(1)
 				}
 				TableColumn("to") { item in
-					Text(item.to)
+					Text(item.to.isEmpty ? item.from : item.to)
+						.lineLimit(1)
+				}
+				TableColumn("description") { item in
+					Text(item.description)
 						.lineLimit(1)
 				}
 			}.frame(maxHeight: .infinity)
@@ -47,7 +51,7 @@ struct MappingSettingsView: View {
 					}
 					Divider()
 					Button("Delete", role: .destructive) {
-						store.removeMappings(store.mappings.filter { selection.contains($0.id) })
+						removeMappings(withIDs: selection)
 					}
 				} primaryAction: { _ in
 					if selectedItem.count == 1, let id = selectedItem.first, let itemIndex = store.mappings.firstIndex(where: { $0.id == id }) {
@@ -57,39 +61,64 @@ struct MappingSettingsView: View {
 					}
 				}
 
-			HStack {
-				Spacer().frame(maxWidth: .infinity)
+			HStack(spacing: 8) {
+				Spacer()
 				Button {
 					addNewItemSheetOpen.toggle()
 				} label: {
-					Image(systemName: "plus").font(Font.system(size: 12, weight: .bold))
-				}.padding(.trailing, 3).buttonStyle(.plain)
+					Label("Add Mapping", systemImage: "plus")
+				}
+				.buttonStyle(.bordered)
+				.controlSize(.small)
 
-				Rectangle().fill(.separator).frame(width: 1, height: 16).clipShape(RoundedRectangle(cornerRadius: 4))
-
-				Button {
-					withAnimation {
-						store.removeMappings(store.mappings.filter { selectedItem.contains($0.id) })
-					}
-
+				Button(role: .destructive) {
+					removeSelectedMappings()
 				} label: {
-					Image(systemName: "minus").font(Font.system(size: 12, weight: .regular))
-				}.padding(.leading, 3).padding(.trailing, 12)
-					.buttonStyle(.plain)
-			}.padding(.bottom, 12).padding(.top, 6)
-		}.sheet(isPresented: $addNewItemSheetOpen) {
+					Label("Remove", systemImage: "minus")
+				}
+				.buttonStyle(.bordered)
+				.controlSize(.small)
+				.disabled(selectedItem.isEmpty)
+				.keyboardShortcut(.delete, modifiers: [])
+			}.padding(.bottom, 12).padding(.top, 6).padding(.trailing, 12)
+		}
+		.onDeleteCommand {
+			removeSelectedMappings()
+		}
+		.onChange(of: store.mappings.map(\.id)) { _, ids in
+			selectedItem.formIntersection(Set(ids))
+		}
+		.sheet(isPresented: $addNewItemSheetOpen) {
 			withAnimation {
-				AddNewMappingView(mode: .add, onComplete: { from, to, type in
-					store.addMapping(type: type, from: from, to: to)
+				AddNewMappingView(mode: .add, onComplete: { from, to, description, type in
+					store.addMapping(type: type, from: from, to: to, description: description)
 				})
 			}
 		}
 		.sheet(item: $editingItem) { item in
-			AddNewMappingView(mode: .edit(item), onComplete: { from, to, type in
+			AddNewMappingView(mode: .edit(item), onComplete: { from, to, description, type in
 				if let editingIndex {
-					store.editMapping(type: type, from: from, to: to, index: editingIndex)
+					store.editMapping(
+						type: type,
+						from: from,
+						to: to,
+						description: description,
+						index: editingIndex
+					)
 				}
 			})
+		}
+	}
+
+	private func removeSelectedMappings() {
+		removeMappings(withIDs: selectedItem)
+	}
+
+	private func removeMappings(withIDs ids: Set<PreferencesDataModel.Mapping.ID>) {
+		guard !ids.isEmpty else { return }
+		withAnimation {
+			store.removeMappings(store.mappings.filter { ids.contains($0.id) })
+			selectedItem.subtract(ids)
 		}
 	}
 }
@@ -116,10 +145,17 @@ struct AddNewMappingView: View {
 
 	@State var from: String = ""
 	@State var to: String = ""
+	@State var description: String = ""
 	@State var type: PreferencesDataModel.MappingType = .processApplicationIdentifier
+	@State private var lastAutoFilledTarget: String = ""
 
 	var mode: Mode = .add
-	typealias OnCompleteCallback = (_ from: String, _ to: String, _ type: PreferencesDataModel.MappingType) -> Void
+	typealias OnCompleteCallback = (
+		_ from: String,
+		_ to: String,
+		_ description: String,
+		_ type: PreferencesDataModel.MappingType
+	) -> Void
 	var onComplete: OnCompleteCallback
 
 	@Environment(\.presentationMode) private var presentationMode
@@ -132,7 +168,12 @@ struct AddNewMappingView: View {
 			break
 		case .edit(let mapping):
 			_from = State(initialValue: mapping.from)
-			_to = State(initialValue: mapping.to)
+			let target = mapping.to.isEmpty
+				? Self.defaultTargetName(from: mapping.from, type: mapping.type)
+				: mapping.to
+			_to = State(initialValue: target)
+			_lastAutoFilledTarget = State(initialValue: target)
+			_description = State(initialValue: mapping.description)
 			_type = State(initialValue: mapping.type)
 		}
 	}
@@ -178,7 +219,14 @@ struct AddNewMappingView: View {
 				GridRow {
 					Text("Target Name")
 						.frame(width: 100, alignment: .trailing)
-					TextField("Enter target process name", text: $to)
+					TextField("Defaults to the original name", text: $to)
+						.textFieldStyle(RoundedBorderTextFieldStyle())
+						.frame(minWidth: 200)
+				}
+				GridRow {
+					Text("Description")
+						.frame(width: 100, alignment: .trailing)
+					TextField("Add a note for this app", text: $description)
 						.textFieldStyle(RoundedBorderTextFieldStyle())
 						.frame(minWidth: 200)
 				}
@@ -194,23 +242,62 @@ struct AddNewMappingView: View {
 				.buttonStyle(.bordered)
 
 				Button("Done") {
-					onComplete(from, to, type)
+					onComplete(from, normalizedTargetName(), description, type)
 					presentationMode.wrappedValue.dismiss()
 				}
 				.keyboardShortcut(.defaultAction)
 				.buttonStyle(.borderedProminent)
-				.disabled(from.isEmpty || to.isEmpty)
+				.disabled(from.isEmpty || normalizedTargetName().isEmpty)
 			}
 			.padding(.top, 8)
 		}
+		.onChange(of: from) { _, newValue in
+			refreshTargetNameIfNeeded(from: newValue, type: type)
+		}
+		.onChange(of: type) { _, newValue in
+			refreshTargetNameIfNeeded(from: from, type: newValue)
+		}
 		.padding(24)
-		.frame(width: 380)
+		.frame(width: 420)
 		.sheet(isPresented: $appSelectorOpen) {
 			AppPickerView { id, _ in
 				appSelectorOpen = false
 				guard let id = id else { return }
 				from = id
+				refreshTargetNameIfNeeded(from: id, type: type)
 			}.frame(width: 400, height: 500)
+		}
+	}
+
+	private func normalizedTargetName() -> String {
+		let trimmedTarget = to.trimmingCharacters(in: .whitespacesAndNewlines)
+		if !trimmedTarget.isEmpty {
+			return trimmedTarget
+		}
+		return Self.defaultTargetName(from: from, type: type)
+	}
+
+	private func refreshTargetNameIfNeeded(
+		from newFrom: String,
+		type newType: PreferencesDataModel.MappingType
+	) {
+		let nextTarget = Self.defaultTargetName(from: newFrom, type: newType)
+		if to.isEmpty || to == lastAutoFilledTarget {
+			to = nextTarget
+			lastAutoFilledTarget = nextTarget
+		}
+	}
+
+	private static func defaultTargetName(
+		from: String,
+		type: PreferencesDataModel.MappingType
+	) -> String {
+		guard !from.isEmpty else { return "" }
+		switch type {
+		case .processApplicationIdentifier, .mediaProcessApplicationIdentifier:
+			return AppUtility.shared.getAppInfo(for: from).displayName
+		case .processName, .mediaProcessName:
+			return from
 		}
 	}
 }

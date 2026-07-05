@@ -1,6 +1,6 @@
 # ProcessReporter Architecture
 
-ProcessReporter is a macOS menu bar utility that records focused app/window activity and system media playback. It stores reports locally and can forward each report to one user-configured shell command.
+ProcessReporter is a macOS menu bar utility that records focused app/window activity and system media playback. It stores reports locally and can forward each report to one selected user-configured shell command slot.
 
 The current design deliberately removes service-specific SDK integrations. The app owns activity collection, persistence, filtering, mapping, and shell payload generation; users own service delivery through scripts or commands.
 
@@ -11,7 +11,7 @@ The current design deliberately removes service-specific SDK integrations. The a
 3. `Reporter` merges focused window data and media data into `ReportModel`.
 4. `Reporter` applies filters and mapping rules from `PreferencesDataModel`.
 5. `Reporter` persists the report through `DataStore`.
-6. `ShellReporterExtension` exports the report as environment variables and executes the configured command.
+6. `ShellReporterExtension` exports the report as environment variables and executes the selected command slot.
 7. `ReporterStatusBridge` updates `StatusMenuStore`, which drives the SwiftUI `MenuBarExtra`.
 
 ## Main Components
@@ -32,7 +32,7 @@ The current design deliberately removes service-specific SDK integrations. The a
 
 ## Shell Contract
 
-The configured command is executed as:
+The selected configured command slot is executed as:
 
 The command runs through the user's `$SHELL -lc` when possible, with `/bin/zsh` as fallback.
 
@@ -40,16 +40,20 @@ The command receives the current process environment plus the following variable
 
 - `PROCESS_REPORTER_JSON`
 - `PROCESS_REPORTER_PROCESS_NAME`
+- `PROCESS_REPORTER_PROCESS_DESCRIPTION`
+- `PROCESS_REPORTER_PROCESS_DAILY_FOREGROUND_DURATION`
 - `PROCESS_REPORTER_WINDOW_TITLE`
 - `PROCESS_REPORTER_PROCESS_BUNDLE_ID`
 - `PROCESS_REPORTER_MEDIA_NAME`
 - `PROCESS_REPORTER_MEDIA_ARTIST`
 - `PROCESS_REPORTER_MEDIA_ALBUM`
 - `PROCESS_REPORTER_MEDIA_PROCESS_NAME`
+- `PROCESS_REPORTER_MEDIA_PROCESS_DESCRIPTION`
 - `PROCESS_REPORTER_MEDIA_PROCESS_BUNDLE_ID`
 - `PROCESS_REPORTER_MEDIA_DURATION`
 - `PROCESS_REPORTER_MEDIA_ELAPSED_TIME`
 - `PROCESS_REPORTER_MEDIA_PLAYING`
+- `PROCESS_REPORTER_FOREGROUND_USAGE_JSON`
 - `PROCESS_REPORTER_TIMESTAMP`
 
 Empty values are passed as empty strings. `PROCESS_REPORTER_JSON` is encoded with `JSONEncoder`; command strings should never be assembled by interpolating JSON manually in Swift.
@@ -91,7 +95,7 @@ Settings are presented with SwiftUI. `PreferencesStore` is the view-facing bound
 
 Important safety rule:
 
-- Importing preferences may copy the shell command text and debug output, but must force `shellIntegration.isEnabled = false`.
+- Importing preferences may copy shell command slots and debug output, but must force `shellIntegration.isEnabled = false`.
 
 ## Concurrency
 

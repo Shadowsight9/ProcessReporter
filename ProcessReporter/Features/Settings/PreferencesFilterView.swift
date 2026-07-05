@@ -93,41 +93,27 @@ struct ApplicationTableView: View {
             }
             // TODO: add backspace
             .onKeyPress(.deleteForward, action: handleKeyDelete)
-            #if DEBUG
-                .onReceive(
-                    selectedProcessItems.publisher,
-                    perform: { value in
-                        debugPrint(value)
-                    }
-                )
-            #endif
 
-            // Button group below the table
-            HStack {
+            HStack(spacing: 8) {
                 Spacer()
-                HStack {
-                    Button(action: {
-                        showingAppPicker = true
-                    }) {
-                        Image(systemName: "plus").bold()
-                    }
-                    .buttonStyle(.plain)
-                    .frame(width: 16, height: 16)
-
-                    Rectangle().frame(width: 1, height: 16)
-                        .foregroundColor(appTableSeparatorColor)
-
-                    Button(action: {
-                        removeSelectedApps()
-                    }) {
-                        Image(systemName: "minus").bold()
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(selectedProcessItems.isEmpty)
-                    .frame(width: 16, height: 16)
+                Button {
+                    showingAppPicker = true
+                } label: {
+                    Label("Add App", systemImage: "plus")
                 }
-                .padding(4)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button(role: .destructive) {
+                    removeSelectedApps()
+                } label: {
+                    Label("Remove", systemImage: "minus")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(selectedProcessItems.isEmpty)
             }
+            .padding(.top, 4)
             // App Picker sheet
             .sheet(isPresented: $showingAppPicker) {
                 AppPickerView { appId, url in

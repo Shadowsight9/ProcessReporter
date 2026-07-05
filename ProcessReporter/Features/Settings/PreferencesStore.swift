@@ -56,9 +56,7 @@ final class PreferencesStore: ObservableObject {
     }
 
     func saveShell(_ integration: ShellIntegration) {
-        var sanitized = integration
-        sanitized.timeoutSeconds = max(sanitized.timeoutSeconds, 1)
-        PreferencesDataModel.shellIntegration.accept(sanitized)
+        PreferencesDataModel.shellIntegration.accept(integration.sanitized())
     }
 
     func testShell() async {
@@ -78,13 +76,34 @@ final class PreferencesStore: ObservableObject {
         PreferencesDataModel.filteredMediaProcesses.accept(appIDs)
     }
 
-    func addMapping(type: PreferencesDataModel.MappingType, from: String, to: String) {
-        PreferencesDataModel.mappingList.accept(mappings + [.init(type: type, from: from, to: to)])
+    func addMapping(
+        type: PreferencesDataModel.MappingType,
+        from: String,
+        to: String,
+        description: String
+    ) {
+        PreferencesDataModel.mappingList.accept(
+            mappings + [.init(
+                id: UUID().uuidString,
+                type: type,
+                from: from,
+                to: to,
+                description: description
+            )]
+        )
     }
 
-    func editMapping(type: PreferencesDataModel.MappingType, from: String, to: String, index: Int) {
+    func editMapping(
+        type: PreferencesDataModel.MappingType,
+        from: String,
+        to: String,
+        description: String,
+        index: Int
+    ) {
         PreferencesDataModel.mappingList.accept(mappings.enumerated().map { i, item in
-            i == index ? .init(type: type, from: from, to: to) : item
+            i == index
+                ? .init(id: item.id, type: type, from: from, to: to, description: description)
+                : item
         })
     }
 

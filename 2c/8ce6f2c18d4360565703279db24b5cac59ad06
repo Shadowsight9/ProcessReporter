@@ -1,0 +1,21 @@
+.github/workflows/release.yml
+  s_dde1df4b9f33e2::t_a42db061415526 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "2c8ce6f2c18d4360565703279db24b5cac59ad06",
+  "prompts": {},
+  "sessions": {
+    "s_dde1df4b9f33e2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f330d-4460-7c12-a7ca-ff85353503dc",
+        "model": "unknown"
+      },
+      "human_author": "huangzheng.368 <huangzheng.368@outlook.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}

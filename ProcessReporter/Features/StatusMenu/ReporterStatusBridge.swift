@@ -28,7 +28,7 @@ class ReporterStatusBridge: NSObject {
 
 	func updateCurrentMediaItem(_ mediaInfo: MediaInfo? = nil) {
 		if let mediaInfo = mediaInfo, let name = mediaInfo.name {
-			StatusMenuStore.shared.currentMedia = formatMediaName(name, mediaInfo.artist, playing: mediaInfo.playing)
+			StatusMenuStore.shared.currentMedia = StatusMenuFormatter.mediaName(name, artist: mediaInfo.artist, playing: mediaInfo.playing)
 		} else {
 			StatusMenuStore.shared.currentMedia = "No Media"
 		}
@@ -36,15 +36,7 @@ class ReporterStatusBridge: NSObject {
 
 	func updateLastSendProcessNameItem(_ info: ReportModel) {
 		StatusMenuStore.shared.lastProcess = info.processName ?? "N/A"
-		StatusMenuStore.shared.lastReportTime = info.timeStamp
-		StatusMenuStore.shared.lastMedia = formatMediaName(info.mediaName, info.artist)
-	}
-
-	func formatMediaName(_ mediaName: String?, _ artist: String?, playing: Bool = true) -> String {
-		let prefix = playing ? "" : "Paused: "
-		if let mediaName = mediaName, let artist = artist {
-			return "\(prefix)\(mediaName) - \(artist)"
-		}
-		return prefix + (mediaName ?? "No Media")
+		StatusMenuStore.shared.lastMedia = StatusMenuFormatter.mediaName(info.mediaName, artist: info.artist)
+        StatusMenuStore.shared.lastReportTime = info.timeStamp
 	}
 }

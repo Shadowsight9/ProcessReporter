@@ -1,33 +1,49 @@
 import ServiceManagement
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct GeneralSettingsView: View {
     @ObservedObject var store: PreferencesStore
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var importError: String?
+    @State private var isImportingSettings = false
+    @State private var isExportingSettings = false
+    @State private var settingsBackupDocument = SettingsBackupDocument(data: Data())
 
     var body: some View {
         Form {
             Section("App") {
                 Toggle("Enabled", isOn: Binding(
                     get: { store.isEnabled },
-                    set: { store.setEnabled($0) }
+                    set: { val in store.setEnabled(val) }
                 ))
                 Toggle("Start at login", isOn: Binding(
                     get: { launchAtLogin },
                     set: setLaunchAtLogin
                 ))
-                Button("Request Accessibility Permission") {
-                    if ApplicationMonitor.shared.requestAccessibilityAuthorization() {
-                        ToastManager.shared.success("Accessibility permission is already enabled.")
-                    }
-                }
+                
             }
 
             Section("Report") {
+                HStack {
+                    Text("Report Type")
+
+                    Spacer()
+                    reportTypeToggle(
+                        "Process",
+                        systemImage: "macwindow",
+                        type: .process
+                    )
+                    reportTypeToggle(
+                        "Media",
+                        systemImage: "music.note.list",
+                        type: .media
+                    )
+                }
+                    
                 Toggle("Report when application focused", isOn: Binding(
-                    get: { store.focusReport },
-                    set: { store.setFocusReport($0) }
+                    get: { store.reportOnFocusChange },
+                    set: { store.setReportOnFocusChange($0) }
                 ))
                 Toggle("Ignore media reports with empty artist", isOn: Binding(
                     get: { store.ignoreNullArtist },
@@ -44,29 +60,46 @@ struct GeneralSettingsView: View {
                 .pickerStyle(.segmented)
             }
 
-            Section("Report Types") {
-                Toggle("Process", isOn: Binding(
-                    get: { store.enabledTypes.contains(.process) },
-                    set: { store.setReportType(.process, enabled: $0) }
-                ))
-                Toggle("Media", isOn: Binding(
-                    get: { store.enabledTypes.contains(.media) },
-                    set: { store.setReportType(.media, enabled: $0) }
-                ))
-            }
 
-            Section("Settings Backup") {
-                HStack {
-                    Button("Import Settings", action: importSettings)
-                    Button("Export Settings", action: exportSettings)
+            
+            HStack {
+                Spacer()
+                Button("Request Accessibility Permission") {
+                    if ApplicationMonitor.shared.requestAccessibilityAuthorization() {
+                        ToastManager.shared.success("Accessibility permission is already enabled.")
+                    }
                 }
-                if let importError {
-                    Text(importError).foregroundStyle(.red)
+                
+                Button {
+                    isImportingSettings = true
+                } label: {
+                    Label("Import Settings", systemImage: "square.and.arrow.down")
+                }
+                
+                Button(action: exportSettings) {
+                    Label("Export Settings", systemImage: "square.and.arrow.up")
                 }
             }
+            if let importError {
+                Text(importError).foregroundStyle(.red)
+            }
+            
         }
         .formStyle(.grouped)
         .padding()
+        .fileImporter(
+            isPresented: $isImportingSettings,
+            allowedContentTypes: [.propertyList],
+            allowsMultipleSelection: false,
+            onCompletion: handleImportResult
+        )
+        .fileExporter(
+            isPresented: $isExportingSettings,
+            document: settingsBackupDocument,
+            contentType: .propertyList,
+            defaultFilename: "ProcessReporterData.plist",
+            onCompletion: handleExportResult
+        )
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
@@ -86,42 +119,67 @@ struct GeneralSettingsView: View {
         }
     }
 
+    private func reportTypeToggle(
+        _ title: String,
+        systemImage: String,
+        type: Reporter.Types
+    ) -> some View {
+        Toggle(isOn: Binding(
+            get: { store.enabledTypes.contains(type) },
+            set: { val in store.setReportType(type, enabled: val) }
+        )) {
+            Label(title, systemImage: systemImage)
+        }
+        .toggleStyle(.button)
+        .controlSize(.large)
+    }
+
     private func exportSettings() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Export"
-        if panel.runModal() == .OK, let url = panel.url {
-            do {
-                try store.exportSettings(to: url)
-                importError = nil
-            } catch {
-                importError = error.localizedDescription
-            }
+        do {
+            settingsBackupDocument = SettingsBackupDocument(data: try store.exportSettingsData())
+            isExportingSettings = true
+            importError = nil
+        } catch {
+            importError = error.localizedDescription
         }
     }
 
-    private func importSettings() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.propertyList]
-        panel.prompt = "Import"
-        if panel.runModal() == .OK, let url = panel.url {
-            do {
-                if try store.importSettings(from: url) {
-                    importError = nil
-                    ToastManager.shared.success("Import successfully")
-                } else {
-                    importError = "Invalid data format"
-                }
-            } catch {
-                importError = error.localizedDescription
-            }
+    private func handleImportResult(_ result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            _ = try store.importSettings(from: url)
+            importError = nil
+            ToastManager.shared.success("Import successfully")
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
+    private func handleExportResult(_ result: Result<URL, Error>) {
+        do {
+            _ = try result.get()
+            importError = nil
+            ToastManager.shared.success("Export successfully")
+        } catch {
+            importError = error.localizedDescription
         }
     }
 }
 
+private struct SettingsBackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.propertyList] }
+
+    var data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}

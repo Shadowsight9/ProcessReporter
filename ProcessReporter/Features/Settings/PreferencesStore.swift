@@ -1,10 +1,10 @@
-import AppKit
 import Combine
+import Foundation
 
 @MainActor
 final class PreferencesStore: ObservableObject {
     @Published var isEnabled = PreferencesDataModel.isEnabled.value
-    @Published var focusReport = PreferencesDataModel.focusReport.value
+    @Published var reportOnFocusChange = PreferencesDataModel.reportOnFocusChange.value
     @Published var sendInterval = PreferencesDataModel.sendInterval.value
     @Published var enabledTypes = PreferencesDataModel.enabledTypes.value.types
     @Published var ignoreNullArtist = PreferencesDataModel.ignoreNullArtist.value
@@ -18,7 +18,7 @@ final class PreferencesStore: ObservableObject {
     init() {
         subscriptions = [
             PreferencesDataModel.isEnabled.subscribeOnMain { [weak self] in self?.isEnabled = $0 },
-            PreferencesDataModel.focusReport.subscribeOnMain { [weak self] in self?.focusReport = $0 },
+            PreferencesDataModel.reportOnFocusChange.subscribeOnMain { [weak self] in self?.reportOnFocusChange = $0 },
             PreferencesDataModel.sendInterval.subscribeOnMain { [weak self] in self?.sendInterval = $0 },
             PreferencesDataModel.enabledTypes.subscribeOnMain { [weak self] in self?.enabledTypes = $0.types },
             PreferencesDataModel.ignoreNullArtist.subscribeOnMain { [weak self] in self?.ignoreNullArtist = $0 },
@@ -33,8 +33,8 @@ final class PreferencesStore: ObservableObject {
         PreferencesDataModel.isEnabled.accept(value)
     }
 
-    func setFocusReport(_ value: Bool) {
-        PreferencesDataModel.focusReport.accept(value)
+    func setReportOnFocusChange(_ value: Bool) {
+        PreferencesDataModel.reportOnFocusChange.accept(value)
     }
 
     func setSendInterval(_ value: SendInterval) {
@@ -91,7 +91,7 @@ final class PreferencesStore: ObservableObject {
     }
 
     func exportSettings(to directoryURL: URL) throws {
-        guard let data = PreferencesDataModel.exportToPlist() else { return }
+        let data = try exportSettingsData()
         let fileURL = directoryURL.appendingPathComponent("ProcessReporterData.plist")
         if FileManager.default.fileExists(atPath: fileURL.path) {
             try FileManager.default.removeItem(at: fileURL)
@@ -99,12 +99,47 @@ final class PreferencesStore: ObservableObject {
         try data.write(to: fileURL, options: [.atomic])
     }
 
+    func exportSettingsData() throws -> Data {
+        guard let data = PreferencesDataModel.exportToPlist() else {
+            throw PreferencesStoreError.exportFailed
+        }
+        return data
+    }
+
     func importSettings(from fileURL: URL) throws -> Bool {
+        let needsSecurityScope = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if needsSecurityScope {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
         let data = try Data(contentsOf: fileURL)
-        return PreferencesDataModel.importFromPlist(data: data)
+        return try importSettings(data)
+    }
+
+    func importSettings(_ data: Data) throws -> Bool {
+        guard PreferencesDataModel.importFromPlist(data: data) else {
+            throw PreferencesStoreError.invalidImportData
+        }
+        return true
     }
 
     deinit {
         subscriptions.forEach { $0.dispose() }
+    }
+}
+
+enum PreferencesStoreError: LocalizedError {
+    case exportFailed
+    case invalidImportData
+
+    var errorDescription: String? {
+        switch self {
+        case .exportFailed:
+            return "Unable to export settings."
+        case .invalidImportData:
+            return "Invalid settings backup file."
+        }
     }
 }

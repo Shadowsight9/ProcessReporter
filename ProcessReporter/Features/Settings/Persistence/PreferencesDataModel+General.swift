@@ -14,8 +14,8 @@ extension PreferencesDataModel {
     @UserDefaultsRelay("sendInterval", defaultValue: SendInterval.tenSeconds)
     static var sendInterval: BehaviorRelay<SendInterval>
 
-    @UserDefaultsRelay("focusReport", defaultValue: true)
-    static var focusReport: BehaviorRelay<Bool>
+    @UserDefaultsRelay("reportOnFocusChange", defaultValue: true)
+    static var reportOnFocusChange: BehaviorRelay<Bool>
 
     @UserDefaultsRelay(
         "enabledTypes", defaultValue: ReporterTypesSet(types: [.media, .process]))

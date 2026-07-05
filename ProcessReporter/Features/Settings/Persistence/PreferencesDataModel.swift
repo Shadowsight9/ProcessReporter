@@ -13,7 +13,7 @@ class PreferencesDataModel {
     static func collectPreferences() -> [String: Any] {
         [
             "isEnabled": PreferencesDataModel.isEnabled.value,
-            "focusReport": PreferencesDataModel.focusReport.value,
+            "reportOnFocusChange": PreferencesDataModel.reportOnFocusChange.value,
             "sendInterval": PreferencesDataModel.sendInterval.value.rawValue,
             "enabledTypes": PreferencesDataModel.enabledTypes.value.toStorable() ?? [
                 Reporter.Types.media.rawValue, Reporter.Types.process.rawValue,
@@ -48,8 +48,8 @@ class PreferencesDataModel {
 			if let isEnabled = dictionary["isEnabled"] as? Bool {
 				PreferencesDataModel.isEnabled.accept(isEnabled)
 			}
-			if let focusReport = dictionary["focusReport"] as? Bool {
-				PreferencesDataModel.focusReport.accept(focusReport)
+            if let reportOnFocusChange = dictionary["reportOnFocusChange"] as? Bool {
+                PreferencesDataModel.reportOnFocusChange.accept(reportOnFocusChange)
 			}
 			if let sendIntervalRaw = dictionary["sendInterval"] as? Int,
 			   let sendInterval = SendInterval(rawValue: sendIntervalRaw)

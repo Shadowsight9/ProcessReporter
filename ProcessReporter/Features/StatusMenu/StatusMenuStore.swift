@@ -13,7 +13,14 @@ final class StatusMenuStore: ObservableObject {
     @Published var isEnabled = PreferencesDataModel.isEnabled.value
     @Published var enabledTypes = PreferencesDataModel.enabledTypes.value.types
 
-    private init() {}
+    private var subscriptions: [RelaySubscription] = []
+
+    private init() {
+        subscriptions = [
+            PreferencesDataModel.isEnabled.subscribeOnMain { [weak self] in self?.isEnabled = $0 },
+            PreferencesDataModel.enabledTypes.subscribeOnMain { [weak self] in self?.enabledTypes = $0.types },
+        ]
+    }
 
     var systemImage: String {
         switch status {
@@ -69,14 +76,13 @@ final class StatusMenuStore: ObservableObject {
         Task {
             let info = try? await MediaInfoManager.getMediaInfoAsync(timeout: 1.0)
             if let info, let name = info.name {
-                currentMedia = formatMediaName(name, info.artist, playing: info.playing)
+                currentMedia = StatusMenuFormatter.mediaName(name, artist: info.artist, playing: info.playing)
             }
         }
     }
 
     func toggleEnabled() {
         PreferencesDataModel.isEnabled.accept(!PreferencesDataModel.isEnabled.value)
-        refreshPreferences()
     }
 
     func toggleReportType(_ type: Reporter.Types) {
@@ -87,24 +93,26 @@ final class StatusMenuStore: ObservableObject {
             types.insert(type)
         }
         PreferencesDataModel.enabledTypes.accept(.init(types: types))
-        refreshPreferences()
-    }
-
-    func requestAccessibilityPermission() {
-        if ApplicationMonitor.shared.requestAccessibilityAuthorization() {
-            ToastManager.shared.success("Accessibility permission is already enabled.")
-        }
     }
 
     func openSettings() {
         SettingsWindowPresenter.shared.showWindow()
     }
 
-    func formatMediaName(_ mediaName: String?, _ artist: String?, playing: Bool = true) -> String {
-        let prefix = playing ? "" : "Paused: "
-        if let mediaName, let artist {
-            return "\(prefix)\(mediaName) - \(artist)"
+    deinit {
+        subscriptions.forEach { $0.dispose() }
+    }
+}
+
+enum StatusMenuFormatter {
+    static func mediaName(_ mediaName: String?, artist: String?, playing: Bool = true) -> String {
+        guard let mediaName, !mediaName.isEmpty else {
+            return "No Media"
         }
-        return prefix + (mediaName ?? "No Media")
+
+        let prefix = playing ? "Playing: " : "Paused: "
+        let suffix = artist?.isEmpty == false ? " - \(artist!)" : ""
+
+        return "\(prefix)\(mediaName)\(suffix)"
     }
 }

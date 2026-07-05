@@ -220,7 +220,7 @@ class Reporter {
 		ApplicationMonitor.shared.startWindowFocusMonitoring(promptIfNeeded: promptForAccessibility)
 		ApplicationMonitor.shared.onWindowFocusChanged = { [weak self] info in
 			guard let self = self else { return }
-			if PreferencesDataModel.shared.focusReport.value
+			if PreferencesDataModel.shared.reportOnFocusChange.value
 				&& PreferencesDataModel.shared.enabledTypes.value.types.contains(.process)
 			{
 				self.prepareSend(windowInfo: info)
@@ -245,7 +245,15 @@ class Reporter {
 		windowInfo optionalWindowInfo: FocusedWindowInfo?,
 		mediaInfo optionalMediaInfo: MediaInfo? = nil
 	) {
+		Task { @MainActor in
+			await prepareSendAsync(windowInfo: optionalWindowInfo, mediaInfo: optionalMediaInfo)
+		}
+	}
 
+	private func prepareSendAsync(
+		windowInfo optionalWindowInfo: FocusedWindowInfo?,
+		mediaInfo optionalMediaInfo: MediaInfo? = nil
+	) async {
 		var windowInfo: FocusedWindowInfo!
 		if let optionalWindowInfo = optionalWindowInfo {
 			windowInfo = optionalWindowInfo
@@ -260,14 +268,7 @@ class Reporter {
 		if let optionalMediaInfo = optionalMediaInfo {
 			mediaInfo = optionalMediaInfo
 		} else {
-			// Offload to background actor with timeout and coalescing
-			let semaphore = DispatchSemaphore(value: 0)
-			Task.detached(priority: .utility) {
-				let result = try? await MediaInfoManager.getMediaInfoAsync(timeout: 3.0)
-				mediaInfo = result ?? mediaInfo
-				semaphore.signal()
-			}
-			_ = semaphore.wait(timeout: .now() + .milliseconds(150))  // brief wait to reduce UI latency
+			mediaInfo = try? await MediaInfoManager.getMediaInfoAsync(timeout: 3.0)
 		}
 
 		let appName = windowInfo.appName

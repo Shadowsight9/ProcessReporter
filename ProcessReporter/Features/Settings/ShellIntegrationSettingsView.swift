@@ -87,12 +87,22 @@ struct ShellIntegrationSettingsView: View {
                 Label("Command", systemImage: "terminal")
                     .font(.headline)
                 Spacer()
-                Stepper(value: $draft.timeoutSeconds, in: 1...300) {
-                    Text("Timeout \(draft.timeoutSeconds)s")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-                .frame(width: 180)
+                
+                LabeledContent("Timeout") {
+                   TextField(
+                       "Seconds",
+                       value: Binding(
+                           get: { draft.timeoutSeconds },
+                           set: { draft.timeoutSeconds = min(max($0, 1), 300) }
+                       ),
+                       format: .number
+                   )
+                   .textFieldStyle(.roundedBorder)
+                   .monospacedDigit()
+                   .frame(width: 72)
+               }
+                
+               Text("s")
             }
 
             ZStack(alignment: .topLeading) {
@@ -104,17 +114,17 @@ struct ShellIntegrationSettingsView: View {
                     )
 
                 TextEditor(text: $draft.command)
-                    .font(.system(size: 14, design: .monospaced))
+                    .font(.system(size: 12, design: .monospaced))
                     .scrollContentBackground(.hidden)
-                    .padding(12)
-                    .frame(minHeight: 190)
+                    .padding(8)
+                    .frame(minHeight: 120)
 
                 if draft.command.isEmpty {
                     Text("curl -X POST \"https://example.com/report\" -H \"Content-Type: application/json\" -d \"$PROCESS_REPORTER_JSON\"")
-                        .font(.system(size: 14, design: .monospaced))
+                        .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 20)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
                         .allowsHitTesting(false)
                 }
             }

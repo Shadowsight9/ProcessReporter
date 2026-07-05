@@ -77,6 +77,8 @@ final class StatusMenuStore: ObservableObject {
             let info = try? await MediaInfoManager.getMediaInfoAsync(timeout: 1.0)
             if let info, let name = info.name {
                 currentMedia = StatusMenuFormatter.mediaName(name, artist: info.artist, playing: info.playing)
+            } else {
+                currentMedia = "No Media"
             }
         }
     }

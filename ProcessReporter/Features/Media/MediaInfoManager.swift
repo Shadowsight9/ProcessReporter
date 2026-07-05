@@ -8,10 +8,12 @@ import Foundation
 
 public class MediaInfoManager: NSObject {
   // Callback for when playback state changes
-  public typealias PlaybackStateChangedCallback = (MediaInfo) -> Void
+  public typealias PlaybackStateChangedCallback = (MediaInfo?) -> Void
 
-  // Local provider backed by MediaRemote.framework.
-  private static var provider: MediaInfoProvider = LocalMediaInfoProvider()
+  // System provider backed by MRNowPlayingRequest through a long-lived
+  // osascript helper process. This avoids external dependencies while keeping
+  // media detection working on newer macOS versions.
+  private static var provider: MediaInfoProvider = SystemNowPlayingProvider()
 
   // Cache the latest media info to avoid synchronous CLI calls on the main thread
   private static var latestInfo: MediaInfo?
@@ -19,7 +21,7 @@ public class MediaInfoManager: NSObject {
   // Store the callback
   private static var playbackStateChangedCallback: PlaybackStateChangedCallback?
   private static var playbackDebounceCancellable: AnyCancellable?
-  private static let playbackSubject = PassthroughSubject<MediaInfo, Never>()
+  private static let playbackSubject = PassthroughSubject<MediaInfo?, Never>()
 
   // Setup the notification observer
   public static func startMonitoringPlaybackChanges(

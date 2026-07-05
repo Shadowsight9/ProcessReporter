@@ -230,6 +230,11 @@ class Reporter {
 		MediaInfoManager.startMonitoringPlaybackChanges { [weak self] mediaInfo in
 			guard let self = self else { return }
 			if PreferencesDataModel.shared.enabledTypes.value.types.contains(.media) {
+                                guard let mediaInfo = mediaInfo else {
+                                        self.statusBridge.updateCurrentMediaItem(nil)
+                                        return
+                                }
+
 				self.prepareSend(
 					windowInfo: ApplicationMonitor.shared.getFocusedWindowInfo(),
 					mediaInfo: mediaInfo
@@ -311,8 +316,8 @@ class Reporter {
 		if enabledTypes.contains(.process), !cachedFilteredProcessAppNames.contains(appName) {
 			dataModel.setProcessInfo(windowInfo)
 		}
-		if let mediaInfo = mediaInfo, mediaInfo.playing {
-			statusBridge.updateCurrentMediaItem(mediaInfo)
+                if enabledTypes.contains(.media) {
+                        statusBridge.updateCurrentMediaItem(mediaInfo)
 		}
 
 		// Apply mapping rules to the data model before sending

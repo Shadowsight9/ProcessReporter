@@ -1,0 +1,33 @@
+.github/workflows/release.yml
+  s_e3ea14f4a097b1::t_727bf196bd620f 37-38,43,45,53
+ProcessReporter.xcodeproj/project.pbxproj
+  s_e3ea14f4a097b1::t_0af4a2a9a00532 10,56,83,285-286,304,339-340,358
+ProcessReporter/App/ProcessReporterApp.swift
+  s_e3ea14f4a097b1::t_b4b79ff2665ee8 29
+ProcessReporter/Features/Settings/GeneralSettingsView.swift
+  s_e3ea14f4a097b1::t_478e9a28c85554 100
+ProcessReporter/Features/Settings/PreferencesStore.swift
+  s_e3ea14f4a097b1::t_2f7f4091d6b27d 118
+README.zh-CN.md
+  s_e3ea14f4a097b1::t_57b79347576510 1,3-7,16,27,39,58,66,70,148-149,152,163
+readme.md
+  s_e3ea14f4a097b1::t_432b302659cb00 1,3-7,16,27,39,58,66,70,148-149,152,163
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "d380aeb4751ab7112b3f5c52b39f3918a0e26636",
+  "prompts": {},
+  "sessions": {
+    "s_e3ea14f4a097b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f32ef-609c-7d21-9375-1477a66a6a09",
+        "model": "unknown"
+      },
+      "human_author": "huangzheng.368 <huangzheng.368@outlook.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}

@@ -57,6 +57,15 @@ Media tracking uses Apple's private `MediaRemote.framework`, so this is local to
 
 On first launch, Preferences opens so you can choose what to track.
 
+Releases are ad-hoc signed and not Apple-notarized, so macOS may say Apple cannot verify the app. First launch options:
+
+- Right-click ProcessReporter in Applications and choose Open.
+- Or run:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/ProcessReporter.app
+```
+
 ## Configure
 
 - General: enable reporting, set interval, choose app/media data.

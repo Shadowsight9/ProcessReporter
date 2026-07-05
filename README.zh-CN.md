@@ -57,6 +57,15 @@ ProcessReporter 会记录当前聚焦应用、窗口标题、前台使用时长�
 
 首次启动会打开偏好设置，方便你选择要记录什么。
 
+Release 使用 ad-hoc 签名，没有 Apple 公证，所以 macOS 可能会提示“Apple 无法验证”。首次打开可以：
+
+- 在 Applications 中右键 ProcessReporter，选择打开。
+- 或运行：
+
+```sh
+xattr -dr com.apple.quarantine /Applications/ProcessReporter.app
+```
+
 ## 配置
 
 - General：启用上报、设置间隔、选择应用/媒体数据。

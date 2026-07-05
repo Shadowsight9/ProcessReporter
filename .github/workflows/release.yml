@@ -18,22 +18,6 @@ jobs:
       - name: List directory
         run: ls -la
 
-      - name: Import signing certificate
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          test -n "$BUILD_CERTIFICATE_BASE64"
-          test -n "$P12_PASSWORD"
-          test -n "$KEYCHAIN_PASSWORD"
-          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
-          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security import certificate.p12 -k build.keychain -P "$P12_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
-
       - name: Build
         run: |
           xcodebuild -project ProcessReporter.xcodeproj \
@@ -45,12 +29,9 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Sign app
-        env:
-          DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
+      - name: Ad-hoc sign app
         run: |
-          test -n "$DEVELOPER_ID_APPLICATION"
-          codesign --force --deep --sign "$DEVELOPER_ID_APPLICATION" \
+          codesign --force --deep --sign - \
             --options runtime \
             --entitlements ProcessReporter/ProcessReporter.entitlements \
             build/Build/Products/Release/ProcessReporter.app
@@ -61,23 +42,7 @@ jobs:
           mkdir -p build/dmg-root
           cp -R build/Build/Products/Release/ProcessReporter.app build/dmg-root/
           ln -s /Applications build/dmg-root/Applications
-          hdiutil create -volname "ProcessReporter" -srcfolder build/dmg-root -ov -format UDZO build/ProcessReporter-arm64.dmg
-
-      - name: Notarize dmg
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          test -n "$APPLE_ID"
-          test -n "$APPLE_APP_SPECIFIC_PASSWORD"
-          test -n "$APPLE_TEAM_ID"
-          xcrun notarytool submit build/ProcessReporter-arm64.dmg \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait
-          xcrun stapler staple build/ProcessReporter-arm64.dmg
+          hdiutil create -volname "ProcessReporter" -srcfolder build/dmg-root -ov -format UDZO "build/ProcessReporter-${GITHUB_REF_NAME}-arm64.dmg"
 
       - name: Create Release
         id: create_release
@@ -85,6 +50,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            build/ProcessReporter-arm64.dmg
+            build/ProcessReporter-${{ github.ref_name }}-arm64.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

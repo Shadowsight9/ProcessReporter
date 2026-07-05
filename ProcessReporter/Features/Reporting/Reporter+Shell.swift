@@ -199,15 +199,12 @@ class ShellReporterExtension: ReporterExtension {
 
         let jsonData = (try? jsonEncoder.encode(payload)) ?? Data("{}".utf8)
         let json = String(data: jsonData, encoding: .utf8) ?? "{}"
-        let foregroundUsageData = (try? jsonEncoder.encode(snapshot.foregroundUsage)) ?? Data("{}".utf8)
-        let foregroundUsageJSON = String(data: foregroundUsageData, encoding: .utf8) ?? "{}"
+        let processUsageSeconds = snapshot.foregroundUsage.duration(forBundleIdentifier: snapshot.processBundleID)
 
         return [
             "PROCESS_REPORTER_PROCESS_NAME": snapshot.processName ?? "",
             "PROCESS_REPORTER_PROCESS_DESCRIPTION": snapshot.processDescription ?? "",
-            "PROCESS_REPORTER_PROCESS_DAILY_FOREGROUND_DURATION": String(
-                snapshot.foregroundUsage.duration(forBundleIdentifier: snapshot.processBundleID)
-            ),
+            "PROCESS_REPORTER_PROCESS_USAGE_DURATION": String(processUsageSeconds),
             "PROCESS_REPORTER_WINDOW_TITLE": snapshot.windowTitle ?? "",
             "PROCESS_REPORTER_PROCESS_BUNDLE_ID": processBundleID,
             "PROCESS_REPORTER_MEDIA_NAME": snapshot.mediaName ?? "",
@@ -219,7 +216,6 @@ class ShellReporterExtension: ReporterExtension {
             "PROCESS_REPORTER_MEDIA_DURATION": String(snapshot.mediaDuration ?? 0),
             "PROCESS_REPORTER_MEDIA_ELAPSED_TIME": String(snapshot.mediaElapsedTime ?? 0),
             "PROCESS_REPORTER_MEDIA_PLAYING": playing,
-            "PROCESS_REPORTER_FOREGROUND_USAGE_JSON": foregroundUsageJSON,
             "PROCESS_REPORTER_TIMESTAMP": iso8601.string(from: snapshot.timeStamp),
             "PROCESS_REPORTER_JSON": json,
         ]

@@ -13,6 +13,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ProcessReporter", category: "AppDelegate")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        disableAutomaticTextSubstitutions()
         setupMenu()
         DispatchQueue.main.async {
             setupMenu()
@@ -39,6 +40,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             SettingsWindowPresenter.shared.showWindow()
         }
+    }
+
+    private func disableAutomaticTextSubstitutions() {
+        UserDefaults.standard.set(false, forKey: "NSAutomaticQuoteSubstitutionEnabled")
+        UserDefaults.standard.set(false, forKey: "NSAutomaticDashSubstitutionEnabled")
+        UserDefaults.standard.set(false, forKey: "NSAutomaticTextReplacementEnabled")
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {

@@ -11,7 +11,7 @@ struct ShellIntegrationSettingsView: View {
         "PROCESS_REPORTER_JSON",
         "PROCESS_REPORTER_PROCESS_NAME",
         "PROCESS_REPORTER_PROCESS_DESCRIPTION",
-        "PROCESS_REPORTER_PROCESS_DAILY_FOREGROUND_DURATION",
+        "PROCESS_REPORTER_PROCESS_USAGE_DURATION",
         "PROCESS_REPORTER_WINDOW_TITLE",
         "PROCESS_REPORTER_PROCESS_BUNDLE_ID",
         "PROCESS_REPORTER_MEDIA_NAME",
@@ -23,7 +23,6 @@ struct ShellIntegrationSettingsView: View {
         "PROCESS_REPORTER_MEDIA_DURATION",
         "PROCESS_REPORTER_MEDIA_ELAPSED_TIME",
         "PROCESS_REPORTER_MEDIA_PLAYING",
-        "PROCESS_REPORTER_FOREGROUND_USAGE_JSON",
         "PROCESS_REPORTER_TIMESTAMP",
     ]
 
@@ -128,7 +127,7 @@ struct ShellIntegrationSettingsView: View {
                     .frame(minHeight: 120)
 
                 if selectedSlot.command.isEmpty {
-                    Text("curl -X POST \"https://example.com/report\" -H \"Content-Type: application/json\" -d \"$PROCESS_REPORTER_JSON\"")
+                    Text("Command")
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(.tertiary)
                         .padding(.vertical, 8)
@@ -145,8 +144,7 @@ struct ShellIntegrationSettingsView: View {
         HStack(spacing: 8) {
             ForEach(0..<ShellIntegration.slotCount, id: \.self) { index in
                 Button {
-                    draft.selectedSlotIndex = index
-                    draft = draft.sanitized()
+                    setSelectedSlotIndex(index)
                 } label: {
                     Text("\(index + 1)")
                         .font(.system(.caption, design: .rounded).weight(.semibold))
@@ -235,18 +233,24 @@ struct ShellIntegrationSettingsView: View {
     }
 
     private var selectedSlot: ShellCommandSlot {
-        draft.sanitized().selectedSlot
+        guard draft.slots.indices.contains(draft.normalizedSelectedSlotIndex) else {
+            return .init(id: draft.normalizedSelectedSlotIndex)
+        }
+        return draft.slots[draft.normalizedSelectedSlotIndex]
+    }
+
+    private func setSelectedSlotIndex(_ index: Int) {
+        draft = draft.sanitized()
+        draft.selectedSlotIndex = index
     }
 
     private func setSelectedSlotCommand(_ command: String) {
-        draft = draft.sanitized()
         let index = draft.normalizedSelectedSlotIndex
         guard draft.slots.indices.contains(index) else { return }
         draft.slots[index].command = command
     }
 
     private func setSelectedSlotTimeout(_ timeoutSeconds: Int) {
-        draft = draft.sanitized()
         let index = draft.normalizedSelectedSlotIndex
         guard draft.slots.indices.contains(index) else { return }
         draft.slots[index].timeoutSeconds = min(max(timeoutSeconds, 1), 300)

@@ -41,7 +41,7 @@ The command receives the current process environment plus the following variable
 - `PROCESS_REPORTER_JSON`
 - `PROCESS_REPORTER_PROCESS_NAME`
 - `PROCESS_REPORTER_PROCESS_DESCRIPTION`
-- `PROCESS_REPORTER_PROCESS_DAILY_FOREGROUND_DURATION`
+- `PROCESS_REPORTER_PROCESS_USAGE_DURATION`
 - `PROCESS_REPORTER_WINDOW_TITLE`
 - `PROCESS_REPORTER_PROCESS_BUNDLE_ID`
 - `PROCESS_REPORTER_MEDIA_NAME`
@@ -53,7 +53,6 @@ The command receives the current process environment plus the following variable
 - `PROCESS_REPORTER_MEDIA_DURATION`
 - `PROCESS_REPORTER_MEDIA_ELAPSED_TIME`
 - `PROCESS_REPORTER_MEDIA_PLAYING`
-- `PROCESS_REPORTER_FOREGROUND_USAGE_JSON`
 - `PROCESS_REPORTER_TIMESTAMP`
 
 Empty values are passed as empty strings. `PROCESS_REPORTER_JSON` is encoded with `JSONEncoder`; command strings should never be assembled by interpolating JSON manually in Swift.

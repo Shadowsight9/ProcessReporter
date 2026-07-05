@@ -1,0 +1,41 @@
+ProcessReporter/Features/Reporting/Reporter.swift
+  s_f7c5e96ffcc03f::t_6d7b2905c89c36 223,248-251,253-256,271
+ProcessReporter/Features/Settings/GeneralSettingsView.swift
+  s_f7c5e96ffcc03f::t_a06ee35c5c91b5 3,9-11,18,24,28-43,45-46,64-76,78-80,83-86,90-102,122-136,138-143,147-164,169-185
+ProcessReporter/Features/Settings/Persistence/PreferencesDataModel+General.swift
+  s_f7c5e96ffcc03f::t_c2a54805386a60 17-18
+ProcessReporter/Features/Settings/Persistence/PreferencesDataModel.swift
+  s_f7c5e96ffcc03f::t_3bbe0fd30f393f 16,51-52
+ProcessReporter/Features/Settings/PreferencesStore.swift
+  s_f7c5e96ffcc03f::t_aa99c36755675c 2,7,21,36-37,94,102-108,110-116,118-125,132-145
+ProcessReporter/Features/StatusMenu/ReporterStatusBridge.swift
+  s_3f7e64026a5573::t_3f81d6a941ddc2 31,39-40
+ProcessReporter/Features/StatusMenu/StatusMenuView.swift
+  s_f7c5e96ffcc03f::t_e9aef064bb0c05 9-16,22,24-25,30-36,38,41-46,49-52,56,58-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "f5da2a71d6068023e8ba3038724142f5b0dc0692",
+  "prompts": {},
+  "sessions": {
+    "s_3f7e64026a5573": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f31ad-1cac-7043-a3b0-b42add37dfd6",
+        "model": "unknown"
+      },
+      "human_author": "huangzheng.368 <huangzheng.368@outlook.com>"
+    },
+    "s_f7c5e96ffcc03f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f31ca-4a49-7152-a494-8418f7bd8ce2",
+        "model": "unknown"
+      },
+      "human_author": "huangzheng.368 <huangzheng.368@outlook.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}

@@ -211,8 +211,12 @@ class Reporter {
 	}
 
 	private func monitor() {
-		ApplicationMonitor.shared.startMouseMonitoring()
-		ApplicationMonitor.shared.startWindowFocusMonitoring()
+		monitor(promptForAccessibility: true)
+	}
+
+	private func monitor(promptForAccessibility: Bool) {
+		ApplicationMonitor.shared.startMouseMonitoring(promptIfNeeded: promptForAccessibility)
+		ApplicationMonitor.shared.startWindowFocusMonitoring(promptIfNeeded: promptForAccessibility)
 		ApplicationMonitor.shared.onWindowFocusChanged = { [weak self] info in
 			guard let self = self else { return }
 			if PreferencesDataModel.shared.focusReport.value
@@ -412,10 +416,21 @@ extension Reporter {
 	private func subscribeGeneralSettingsChanged() {
 		let preferences = PreferencesDataModel.shared
 
+		#if DEBUG
+			var isInitialEnabledEmission = true
+		#endif
+
 		let d1 = preferences.isEnabled.subscribe { [weak self] enabled in
 			guard let self = self else { return }
+			#if DEBUG
+				let shouldPromptForAccessibility = !isInitialEnabledEmission
+				isInitialEnabledEmission = false
+			#else
+				let shouldPromptForAccessibility = true
+			#endif
+
 			if enabled {
-				self.monitor()
+				self.monitor(promptForAccessibility: shouldPromptForAccessibility)
 			} else {
 				self.dispose()
 				self.disposeTimer()

@@ -16,7 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup sleep/wake notifications for cache cleanup
         setupSleepWakeNotifications()
 
-        Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { [weak self] _ in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
             if !PreferencesDataModel.shared.isEnabled.value {
                 self?.showSettings()
             }

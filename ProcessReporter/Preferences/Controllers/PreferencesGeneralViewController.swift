@@ -12,13 +12,14 @@ import SnapKit
 
 class PreferencesGeneralViewController: NSViewController, SettingWindowProtocol {
     private let logger = Logger()
-    final let frameSize: NSSize = .init(width: 600, height: 320)
+    final let frameSize: NSSize = .init(width: 600, height: 350)
 
     private var gridView: NSGridView!
 
     // MARK: - App UI Elements
 
     private var enabledButton: NSButton!
+    private var accessibilityPermissionButton: NSButton!
     private var startupButton: NSButton!
 
     // MARK: - Reporter UI Elements
@@ -76,6 +77,14 @@ class PreferencesGeneralViewController: NSViewController, SettingWindowProtocol 
         enabledButton = NSButton(
             checkboxWithTitle: "Enabled", target: self, action: #selector(enabledButtonClicked))
         createRow(leftView: NSTextField(labelWithString: "App:"), rightView: enabledButton)
+
+        accessibilityPermissionButton = NSButton(
+            title: "Request Accessibility Permission",
+            target: self,
+            action: #selector(requestAccessibilityPermission)
+        )
+        accessibilityPermissionButton.bezelStyle = .rounded
+        createRow(leftView: spacer, rightView: accessibilityPermissionButton)
 
         startupButton = NSButton(
             checkboxWithTitle: "Start at login", target: self, action: #selector(toggleStartAtLogin))
@@ -187,6 +196,12 @@ extension PreferencesGeneralViewController {
 
     @objc private func enabledButtonClicked(sender: NSButton) {
         PreferencesDataModel.shared.isEnabled.accept(sender.state == .on)
+    }
+
+    @objc private func requestAccessibilityPermission() {
+        if ApplicationMonitor.shared.requestAccessibilityAuthorization() {
+            ToastManager.shared.success("Accessibility permission is already enabled.")
+        }
     }
 
     @objc private func focusReportButtonClicked(sender: NSButton) {

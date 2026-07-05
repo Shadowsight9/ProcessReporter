@@ -31,45 +31,70 @@ func main() {
 private func setupMenu() {
     let mainMenu = NSMenu()
 
-    // MARK: - File Menu
+    mainMenu.addItem(makeAppMenu())
+    mainMenu.addItem(makeEditMenu())
 
-    let fileMenu = NSMenu(title: "File")
-    let fileMenuItem = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
-    fileMenuItem.submenu = fileMenu
+    // 设置主菜单
+    NSApp.mainMenu = mainMenu
+}
 
-    fileMenu.addItem(NSMenuItem(
+private func makeAppMenu() -> NSMenuItem {
+    let appName = ProcessInfo.processInfo.processName
+    let appMenu = NSMenu(title: appName)
+    let appMenuItem = NSMenuItem(title: appName, action: nil, keyEquivalent: "")
+    appMenuItem.submenu = appMenu
+
+    appMenu.addItem(NSMenuItem(
+        title: "Quit \(appName)",
+        action: #selector(NSApplication.terminate(_:)),
+        keyEquivalent: "q"
+    ))
+    
+    appMenu.addItem(NSMenuItem(
         title: "Close Window",
         action: #selector(NSWindow.performClose(_:)),
         keyEquivalent: "w"
     ))
 
-    fileMenu.addItem(NSMenuItem(
-        title: "Quit App",
-        action: #selector(NSApplication.terminate(_:)),
-        keyEquivalent: "q"
-    ))
+    return appMenuItem
+}
 
-    mainMenu.addItem(fileMenuItem)
 
-    // MARK: - Edit menu
 
+private func makeEditMenu() -> NSMenuItem {
     let editMenu = NSMenu(title: "Edit")
     let editMenuItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
     editMenuItem.submenu = editMenu
 
-    // 使用系统自带的 selector
-    editMenu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
-    editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
-    editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
-    editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
-    editMenu.addItem(NSMenuItem.separator())
-    editMenu.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
-    editMenu.addItem(NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z"))
+    enum MenuEntry {
+        case item(title: String, action: Selector, keyEquivalent: String)
+        case separator
+    }
 
-    mainMenu.addItem(editMenuItem)
+    let editingItems: [MenuEntry] = [
+        .item(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"),
+        .item(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"),
+        .item(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"),
+        .item(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"),
+        .separator,
+        .item(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"),
+        .item(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z"),
+    ]
 
-    // 设置主菜单
-    NSApp.mainMenu = mainMenu
+    editingItems.forEach { item in
+        switch item {
+        case let .item(title, action, keyEquivalent):
+            editMenu.addItem(NSMenuItem(
+                title: title,
+                action: action,
+                keyEquivalent: keyEquivalent
+            ))
+        case .separator:
+            editMenu.addItem(.separator())
+        }
+    }
+
+    return editMenuItem
 }
 
 main()

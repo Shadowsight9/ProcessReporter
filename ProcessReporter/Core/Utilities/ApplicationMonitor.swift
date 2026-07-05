@@ -14,71 +14,95 @@ class ApplicationMonitor {
 
     private var mouseEventMonitor: Any?
     private var windowFocusObserver: Any?
+    private var didRequestAccessibilityPrompt = false
+    private var lastAccessibilityToastDate = Date.distantPast
+
+    private let accessibilityToastCooldown: TimeInterval = 60
 
     // Mouse event callback
     var onMouseClicked: ((MouseClickInfo) -> Void)?
     // Window focus change callback
     var onWindowFocusChanged: ((FocusedWindowInfo) -> Void)?
 
-    private init() {
-        checkAndRequestAccessibilityPermissions()
-    }
+    private init() {}
 
-    private func checkAndRequestAccessibilityPermissions() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-        let accessibilityEnabled = AXIsProcessTrustedWithOptions(options as CFDictionary)
-
-        if !accessibilityEnabled {
-            DispatchQueue.main.async {
-                let alert = NSAlert()
-                alert.messageText = "Need Accessibility Permissions"
-                alert.informativeText =
-                    "ProcessReporter needs accessibility permissions to monitor window changes. Please grant permissions in System Preferences.\n\nPath: System Preferences > Security & Privacy > Accessibility"
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: "Open System Preferences")
-                alert.addButton(withTitle: "Later")
-
-                let response = alert.runModal()
-                if response == .alertFirstButtonReturn {
-                    NSWorkspace.shared.open(
-                        URL(
-                            string:
-                                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                        )!)
-                }
-            }
+    @discardableResult
+    private func checkAndRequestAccessibilityPermissions(promptIfNeeded: Bool = true) -> Bool {
+        if isAccessibilityEnabled() {
+            return true
         }
+
+        guard promptIfNeeded else {
+            return AXIsProcessTrusted()
+        }
+
+        if didRequestAccessibilityPrompt {
+            return AXIsProcessTrusted()
+        }
+
+        didRequestAccessibilityPrompt = true
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        return AXIsProcessTrustedWithOptions(options as CFDictionary)
     }
 
     func isAccessibilityEnabled() -> Bool {
         return AXIsProcessTrusted()
     }
 
-    private func getWindowTitle(forPID pid: pid_t) -> String? {
-        let appElement = AXUIElementCreateApplication(pid)
+    @discardableResult
+    func requestAccessibilityAuthorization() -> Bool {
+        if isAccessibilityEnabled() {
+            return true
+        }
 
-        var mainWindow: CFTypeRef?
-        let mainWindowError = AXUIElementCopyAttributeValue(
-            appElement, kAXMainWindowAttribute as CFString, &mainWindow)
-        let window = mainWindow
-        guard mainWindowError == .success else {
+        didRequestAccessibilityPrompt = true
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        let accessibilityEnabled = AXIsProcessTrustedWithOptions(options as CFDictionary)
+        if !accessibilityEnabled {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+        }
+        return accessibilityEnabled
+    }
+
+    private func getWindowTitle(_ pid: pid_t) -> String? {
+        let app = AXUIElementCreateApplication(pid)
+
+        var mainWindowValue: CFTypeRef?
+        let mainWindowResult = AXUIElementCopyAttributeValue(
+            app,
+            kAXMainWindowAttribute as CFString,
+            &mainWindowValue
+        )
+
+        guard mainWindowResult == .success else {
             return nil
         }
 
-        var title: CFTypeRef?
-        let titleError = AXUIElementCopyAttributeValue(
-            window as! AXUIElement, kAXTitleAttribute as CFString, &title)
-        guard titleError == .success, let titleString = title as? String else {
+        guard let mainWindow = mainWindowValue as! AXUIElement? else {
             return nil
         }
 
-        return titleString
+        var titleValue: CFTypeRef?
+        let titleResult = AXUIElementCopyAttributeValue(
+            mainWindow,
+            kAXTitleAttribute as CFString,
+            &titleValue
+        )
+
+        guard titleResult == .success else {
+            return nil
+        }
+
+        guard let title = titleValue as? String else {
+            return nil
+        }
+
+        return title
     }
 
     func getFocusedWindowInfo() -> FocusedWindowInfo? {
         guard isAccessibilityEnabled() else {
-            ToastManager.shared.error(
-                "Accessibility permissions are required to monitor window changes.")
+            showAccessibilityToastIfNeeded()
             return nil
         }
 
@@ -93,7 +117,7 @@ class ApplicationMonitor {
 
         let appName = app.localizedName ?? "Unknown"
         let icon = app.icon
-        let title = getWindowTitle(forPID: app.processIdentifier)
+        let title = getWindowTitle(app.processIdentifier)
 
         return FocusedWindowInfo(
             appName: appName, icon: icon,
@@ -102,9 +126,8 @@ class ApplicationMonitor {
         )
     }
 
-    func startMouseMonitoring() {
-        guard isAccessibilityEnabled() else {
-            checkAndRequestAccessibilityPermissions()
+    func startMouseMonitoring(promptIfNeeded: Bool = true) {
+        guard checkAndRequestAccessibilityPermissions(promptIfNeeded: promptIfNeeded) else {
             return
         }
 
@@ -130,9 +153,8 @@ class ApplicationMonitor {
         }
     }
 
-    func startWindowFocusMonitoring() {
-        guard isAccessibilityEnabled() else {
-            checkAndRequestAccessibilityPermissions()
+    func startWindowFocusMonitoring(promptIfNeeded: Bool = true) {
+        guard checkAndRequestAccessibilityPermissions(promptIfNeeded: promptIfNeeded) else {
             return
         }
 
@@ -159,6 +181,16 @@ class ApplicationMonitor {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
             windowFocusObserver = nil
         }
+    }
+
+    private func showAccessibilityToastIfNeeded() {
+        let now = Date()
+        guard now.timeIntervalSince(lastAccessibilityToastDate) >= accessibilityToastCooldown else {
+            return
+        }
+
+        lastAccessibilityToastDate = now
+        ToastManager.shared.error("Accessibility permissions are required to monitor window changes.")
     }
 
     deinit {

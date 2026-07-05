@@ -1,5 +1,7 @@
 # ProcessReporter
 
+> Shadowsight9 维护的 fork 版本。这个 fork 重点是整理成更干净的现代 SwiftUI/macOS 代码结构，保留基于 shell 命令的上报能力，并移除上游项目中的历史服务专用集成。
+
 [![macOS](https://img.shields.io/badge/macOS-15%2B-blue.svg)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange.svg)](https://swift.org/)
 [![Xcode](https://img.shields.io/badge/Xcode-15%2B-blue.svg)](https://developer.apple.com/xcode/)
@@ -164,20 +166,22 @@ xcodebuild -project ProcessReporter.xcodeproj -scheme ProcessReporter -configura
 
 当前依赖：
 
-- SnapKit：AppKit 布局辅助。
-- RxSwift/RxCocoa：现有偏好设置和 UI 绑定。
+- 不需要第三方 Swift Package。
 
 Alamofire、Discord Game SDK、S3 helper 和服务专用集成已经移除。新的外部上报需求应优先通过 `ShellReporterExtension` 完成，而不是新增内置服务 SDK。
 
 常用入口：
 
-- `ProcessReporter/Core/Reporter/Reporter.swift`
-- `ProcessReporter/Core/Reporter/Reporter+Shell.swift`
-- `ProcessReporter/Core/MediaInfoManager/MediaInfoManager.swift`
-- `ProcessReporter/Core/MediaInfoManager/LocalMediaInfoProvider.swift`
-- `ProcessReporter/Preferences/Views/SettingsRootView.swift`
-- `ProcessReporter/UI/Status/StatusMenuView.swift`
-- `ProcessReporter/Core/Database/DataStore.swift`
+- `ProcessReporter/App/ProcessReporterApp.swift`
+- `ProcessReporter/Features/Reporting/Reporter.swift`
+- `ProcessReporter/Features/Reporting/Reporter+Shell.swift`
+- `ProcessReporter/Features/StatusMenu/StatusMenuView.swift`
+- `ProcessReporter/Features/StatusMenu/StatusMenuStore.swift`
+- `ProcessReporter/Features/Settings/PreferencesStore.swift`
+- `ProcessReporter/Features/Settings/SettingsRootView.swift`
+- `ProcessReporter/Features/Media/MediaInfoManager.swift`
+- `ProcessReporter/Features/Media/LocalMediaInfoProvider.swift`
+- `ProcessReporter/Features/History/DataStore.swift`
 
 ## License
 

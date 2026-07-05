@@ -12,23 +12,23 @@ The current design deliberately removes service-specific SDK integrations. The a
 4. `Reporter` applies filters and mapping rules from `PreferencesDataModel`.
 5. `Reporter` persists the report through `DataStore`.
 6. `ShellReporterExtension` exports the report as environment variables and executes the configured command.
-7. `ReporterStatusItemManager` updates `StatusMenuStore`, which drives the SwiftUI `MenuBarExtra`.
+7. `ReporterStatusBridge` updates `StatusMenuStore`, which drives the SwiftUI `MenuBarExtra`.
 
 ## Main Components
 
-- `ProcessReporter/AppDelegate.swift`: app lifecycle, settings window launch, sleep/wake handling.
-- `ProcessReporter/Core/Reporter/Reporter.swift`: report lifecycle, timers, filters, mapping, persistence, and extension dispatch.
-- `ProcessReporter/Core/Reporter/Reporter+Shell.swift`: shell payload generation, environment variables, timeout handling, stdout/stderr capture.
-- `ProcessReporter/Core/Utilities/ApplicationMonitor.swift`: focused app and window title tracking.
-- `ProcessReporter/Core/MediaInfoManager/MediaInfoManager.swift`: media facade, latest media cache, serialized async fetches.
-- `ProcessReporter/Core/MediaInfoManager/LocalMediaInfoProvider.swift`: local MediaRemote-backed provider.
-- `ProcessReporter/Core/Database/DataStore.swift`: actor-isolated value API over SwiftData.
-- `ProcessReporter/Core/Database/Database.swift`: SwiftData container and background task support.
-- `ProcessReporter/ProcessReporterApp.swift`: SwiftUI app entry, `MenuBarExtra`, and Settings scene.
-- `ProcessReporter/Preferences/DataModels/`: persisted preferences.
-- `ProcessReporter/Preferences/Store/PreferencesStore.swift`: SwiftUI bridge over existing preference storage.
-- `ProcessReporter/Preferences/Views/SettingsRootView.swift`: SwiftUI settings UI.
-- `ProcessReporter/UI/Status/StatusMenuView.swift`: SwiftUI menu bar content.
+- `ProcessReporter/App/ProcessReporterApp.swift`: SwiftUI app entry, `MenuBarExtra`, and Settings scene.
+- `ProcessReporter/App/AppDelegate.swift`: AppKit lifecycle hooks and sleep/wake handling.
+- `ProcessReporter/App/SettingsWindowPresenter.swift`: lightweight settings window presenter for menu bar and first-launch flows.
+- `ProcessReporter/Features/StatusMenu/`: menu bar UI, menu state, and reporter-to-menu bridge.
+- `ProcessReporter/Features/Settings/`: SwiftUI settings pages and `PreferencesStore`.
+- `ProcessReporter/Features/Settings/Persistence/`: persisted preference models and local `UserDefaultsRelay`.
+- `ProcessReporter/Features/Reporting/`: report lifecycle, timers, filters, mapping, persistence, extension dispatch, and shell execution.
+- `ProcessReporter/Features/Monitoring/`: focused app/window title tracking.
+- `ProcessReporter/Features/Media/`: media facade, latest media cache, serialized async fetches, and local MediaRemote-backed provider.
+- `ProcessReporter/Features/History/`: SwiftData container, actor-isolated value API, and report/icon models.
+- `ProcessReporter/Shared/Components/`: shared UI helpers such as toast feedback.
+- `ProcessReporter/Shared/Utilities/`: shared system helpers such as app lookup, rate limiting, and network checks.
+- `ProcessReporter/Shared/Extensions/`: small standard-library/AppKit extensions.
 
 ## Shell Contract
 
@@ -87,7 +87,7 @@ Future database changes should prefer explicit migration stages or a user-visibl
 
 ## Preferences
 
-Settings are presented with SwiftUI. `PreferencesStore` bridges SwiftUI views to the existing `PreferencesDataModel`/`UserDefaultsRelay` persistence layer.
+Settings are presented with SwiftUI. `PreferencesStore` is the view-facing boundary for settings screens. The lower-level `PreferencesDataModel` and local `UserDefaultsRelay` remain in `Features/Settings/Persistence` and provide typed `value`/`accept`/subscription behavior without RxSwift.
 
 Important safety rule:
 
@@ -117,15 +117,15 @@ xcodebuild -project ProcessReporter.xcodeproj -scheme ProcessReporter -configura
 
 Current dependencies:
 
-- SnapKit for AppKit layout.
-- RxSwift/RxCocoa for existing preference and UI bindings.
+- No third-party Swift packages are required.
 
 When changing behavior:
 
-- Reporting changes start in `Reporter.swift`.
-- Shell behavior changes start in `Reporter+Shell.swift`.
-- Media behavior changes start in `MediaInfoManager.swift` and `LocalMediaInfoProvider.swift`.
-- Preference changes start in `PreferencesDataModel` and the relevant view/controller.
+- Reporting changes start in `Features/Reporting/Reporter.swift`.
+- Shell behavior changes start in `Features/Reporting/Reporter+Shell.swift`.
+- Media behavior changes start in `Features/Media/MediaInfoManager.swift` and `Features/Media/LocalMediaInfoProvider.swift`.
+- Preference UI changes start in `Features/Settings/PreferencesStore.swift` and the relevant SwiftUI view.
+- Preference persistence changes start in `Features/Settings/Persistence/PreferencesDataModel.swift`.
 - Avoid adding new service-specific integrations unless the shell contract cannot reasonably express the use case.
 
 ## Security Notes

@@ -1,5 +1,7 @@
 # ProcessReporter
 
+> Fork version maintained by Shadowsight9. This fork focuses on a cleaner modern SwiftUI/macOS codebase, shell-command based reporting, and removal of legacy service-specific integrations from the upstream project.
+
 [![macOS](https://img.shields.io/badge/macOS-15%2B-blue.svg)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange.svg)](https://swift.org/)
 [![Xcode](https://img.shields.io/badge/Xcode-15%2B-blue.svg)](https://developer.apple.com/xcode/)
@@ -164,20 +166,22 @@ xcodebuild -project ProcessReporter.xcodeproj -scheme ProcessReporter -configura
 
 Current dependencies:
 
-- SnapKit for AppKit layout.
-- RxSwift/RxCocoa for existing preference and UI bindings.
+- No third-party Swift packages are required.
 
 Alamofire, Discord Game SDK, S3 helpers, and service-specific integrations have been removed. New external reporting should go through `ShellReporterExtension`, not a new built-in service SDK.
 
 Useful entry points:
 
-- `ProcessReporter/Core/Reporter/Reporter.swift`
-- `ProcessReporter/Core/Reporter/Reporter+Shell.swift`
-- `ProcessReporter/Core/MediaInfoManager/MediaInfoManager.swift`
-- `ProcessReporter/Core/MediaInfoManager/LocalMediaInfoProvider.swift`
-- `ProcessReporter/Preferences/Views/SettingsRootView.swift`
-- `ProcessReporter/UI/Status/StatusMenuView.swift`
-- `ProcessReporter/Core/Database/DataStore.swift`
+- `ProcessReporter/App/ProcessReporterApp.swift`
+- `ProcessReporter/Features/Reporting/Reporter.swift`
+- `ProcessReporter/Features/Reporting/Reporter+Shell.swift`
+- `ProcessReporter/Features/StatusMenu/StatusMenuView.swift`
+- `ProcessReporter/Features/StatusMenu/StatusMenuStore.swift`
+- `ProcessReporter/Features/Settings/PreferencesStore.swift`
+- `ProcessReporter/Features/Settings/SettingsRootView.swift`
+- `ProcessReporter/Features/Media/MediaInfoManager.swift`
+- `ProcessReporter/Features/Media/LocalMediaInfoProvider.swift`
+- `ProcessReporter/Features/History/DataStore.swift`
 
 ## License
 

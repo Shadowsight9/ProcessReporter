@@ -1,6 +1,10 @@
-# ProcessReporter
+# Statusa
 
-> A macOS menu bar app that turns "what am I doing right now?" into data you can keep, map, and publish.
+<p align="center">
+  <img src="ProcessReporter/Assets.xcassets/AppIcon.appiconset/icon_512x512@2x.png" alt="Statusa icon" width="144">
+</p>
+
+> A tiny status muse for your macOS menu bar. Statusa turns "what am I doing right now?" into a cute little status you can keep, map, and publish.
 
 [![macOS](https://img.shields.io/badge/macOS-15%2B-blue.svg)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange.svg)](https://swift.org/)
@@ -9,7 +13,7 @@
 
 [中文文档](README.zh-CN.md)
 
-ProcessReporter watches your focused app, window title, foreground time, and now-playing media. Keep it local as a tiny activity diary, or pipe it into your own status page, bot, stream overlay, profile badge, or webhook.
+Statusa watches your focused app, window title, foreground time, and now-playing media. Keep her local as a tiny activity diary, or let her carry your current status to a personal site, bot, stream overlay, profile badge, or webhook.
 
 Examples:
 
@@ -20,7 +24,7 @@ Examples:
 
 ## Why
 
-Most presence tools only know whether you are online. ProcessReporter can say what kind of online you are: surfing the web, coding, gaming, watching a show, listening to music, or anything else you map it to.
+Most presence tools only know whether you are online. Statusa can say what kind of online you are: surfing the web, coding, gaming, watching a show, listening to music, or anything else you map it to. She stays quiet in the menu bar, then lifts one neat little "current status" card when you ask.
 
 Good uses:
 
@@ -32,7 +36,7 @@ Good uses:
 
 ## Features
 
-- Menu bar app, lightweight and quiet.
+- Menu bar app, lightweight, quiet, and just a little charming.
 - Tracks focused app, window title, and app foreground duration.
 - Reads system now-playing metadata locally.
 - Stores history with SwiftData.
@@ -51,7 +55,7 @@ Media tracking uses Apple's private `MediaRemote.framework`, so this is local to
 
 1. Download the latest release.
 2. Open the `.dmg`.
-3. Drag ProcessReporter into Applications.
+3. Drag Statusa into Applications.
 4. Launch it.
 5. Grant Accessibility permission when macOS asks.
 
@@ -59,11 +63,11 @@ On first launch, Preferences opens so you can choose what to track.
 
 Releases are ad-hoc signed and not Apple-notarized, so macOS may say Apple cannot verify the app. First launch options:
 
-- Right-click ProcessReporter in Applications and choose Open.
+- Right-click Statusa in Applications and choose Open.
 - Or run:
 
 ```sh
-xattr -dr com.apple.quarantine /Applications/ProcessReporter.app
+xattr -dr com.apple.quarantine /Applications/Statusa.app
 ```
 
 ## Configure
@@ -141,9 +145,11 @@ Every shell report gets these variables. Missing values are empty strings.
 
 `PROCESS_REPORTER_JSON` contains the same report as structured JSON, including process, media, and foreground usage data.
 
+The environment variable prefix stays `PROCESS_REPORTER_*` for compatibility with existing scripts. Statusa got a new name, but your webhook should not have to wake up confused.
+
 ## Privacy
 
-ProcessReporter does not take screenshots, record keystrokes, read file contents, or track mouse paths. It records app names, window titles, media metadata, and timing according to your settings.
+Statusa does not take screenshots, record keystrokes, read file contents, or track mouse paths. She records app names, window titles, media metadata, and timing according to your settings.
 
 Start private:
 
@@ -154,7 +160,7 @@ Start private:
 
 ## Troubleshooting
 
-- Missing window titles: enable System Settings -> Privacy & Security -> Accessibility for ProcessReporter, then restart it.
+- Missing window titles: enable System Settings -> Privacy & Security -> Accessibility for Statusa, then restart it.
 - Shell command fails: use Test, check stdout/stderr, prefer absolute paths.
 - Menu bar icon missing: confirm the app is running in Activity Monitor, then restart it.
 - High memory usage: clear old history and reduce report frequency.

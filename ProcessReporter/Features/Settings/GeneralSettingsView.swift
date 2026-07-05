@@ -97,7 +97,7 @@ struct GeneralSettingsView: View {
             isPresented: $isExportingSettings,
             document: settingsBackupDocument,
             contentType: .propertyList,
-            defaultFilename: "ProcessReporterData.plist",
+            defaultFilename: "StatusaData.plist",
             onCompletion: handleExportResult
         )
     }

@@ -26,7 +26,7 @@ struct ProcessReporterApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("ProcessReporter", systemImage: statusStore.systemImage) {
+        MenuBarExtra("Statusa", systemImage: statusStore.systemImage) {
             StatusMenuView()
         }
         Settings {

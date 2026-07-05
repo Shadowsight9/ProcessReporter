@@ -115,7 +115,7 @@ final class PreferencesStore: ObservableObject {
 
     func exportSettings(to directoryURL: URL) throws {
         let data = try exportSettingsData()
-        let fileURL = directoryURL.appendingPathComponent("ProcessReporterData.plist")
+        let fileURL = directoryURL.appendingPathComponent("StatusaData.plist")
         if FileManager.default.fileExists(atPath: fileURL.path) {
             try FileManager.default.removeItem(at: fileURL)
         }

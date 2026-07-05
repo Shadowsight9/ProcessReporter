@@ -1,6 +1,10 @@
-# ProcessReporter
+# Statusa
 
-> 一个 macOS 菜单栏小工具，把“我现在在干嘛”变成可保存、可映射、可发布的状态数据。
+<p align="center">
+  <img src="ProcessReporter/Assets.xcassets/AppIcon.appiconset/icon_512x512@2x.png" alt="Statusa icon" width="144">
+</p>
+
+> 你的菜单栏状态娘。她会把“我现在在干嘛”收拾成一条可保存、可映射、可发布的小状态。
 
 [![macOS](https://img.shields.io/badge/macOS-15%2B-blue.svg)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange.svg)](https://swift.org/)
@@ -9,7 +13,7 @@
 
 [English](readme.md)
 
-ProcessReporter 会记录当前聚焦应用、窗口标题、前台使用时长和系统正在播放的音乐。你可以把它当本地活动日志，也可以把状态发到个人主页、聊天机器人、直播 overlay、badge 或任意 webhook。
+Statusa 会记录当前聚焦应用、窗口标题、前台使用时长和系统正在播放的音乐。你可以把她当本地活动日志，也可以让她把你的当前状态递到个人主页、聊天机器人、直播 overlay、badge 或任意 webhook。
 
 比如：
 
@@ -20,7 +24,7 @@ ProcessReporter 会记录当前聚焦应用、窗口标题、前台使用时长�
 
 ## 为什么
 
-很多在线状态只能告诉别人“我在线”。ProcessReporter 可以更具体一点：你是在网上冲浪、写代码、打游戏、看剧、听歌，还是在做一些只有窗口标题知道的事。
+很多在线状态只能告诉别人“我在线”。Statusa 可以更具体一点：你是在网上冲浪、写代码、打游戏、看剧、听歌，还是在做一些只有窗口标题知道的事。她不抢戏，只在菜单栏里安静地举起一张“当前状态”小牌牌。
 
 适合用来：
 
@@ -32,7 +36,7 @@ ProcessReporter 会记录当前聚焦应用、窗口标题、前台使用时长�
 
 ## 功能
 
-- 轻量菜单栏应用。
+- 轻量菜单栏应用，可爱但不吵。
 - 记录聚焦应用、窗口标题和前台使用时长。
 - 本地读取系统正在播放的媒体信息。
 - 用 SwiftData 保存本地历史。
@@ -51,7 +55,7 @@ ProcessReporter 会记录当前聚焦应用、窗口标题、前台使用时长�
 
 1. 从 Releases 下载最新版本。
 2. 打开 `.dmg`。
-3. 将 ProcessReporter 拖入 Applications。
+3. 将 Statusa 拖入 Applications。
 4. 启动应用。
 5. 按提示授予辅助功能权限。
 
@@ -59,11 +63,11 @@ ProcessReporter 会记录当前聚焦应用、窗口标题、前台使用时长�
 
 Release 使用 ad-hoc 签名，没有 Apple 公证，所以 macOS 可能会提示“Apple 无法验证”。首次打开可以：
 
-- 在 Applications 中右键 ProcessReporter，选择打开。
+- 在 Applications 中右键 Statusa，选择打开。
 - 或运行：
 
 ```sh
-xattr -dr com.apple.quarantine /Applications/ProcessReporter.app
+xattr -dr com.apple.quarantine /Applications/Statusa.app
 ```
 
 ## 配置
@@ -141,9 +145,11 @@ printf '%s\n' "$message"
 
 `PROCESS_REPORTER_JSON` 是同一份报告的结构化 JSON，包含应用、媒体和前台使用数据。
 
+这些环境变量名沿用 `PROCESS_REPORTER_*` 前缀，方便旧脚本继续工作。Statusa 换了新名字，但不会突然把你的 webhook 脚本弄哭。
+
 ## 隐私
 
-ProcessReporter 不截图，不记录键盘输入，不读取文件内容，也不追踪鼠标轨迹。它只按你的设置记录应用名、窗口标题、媒体元数据和时长。
+Statusa 不截图，不记录键盘输入，不读取文件内容，也不追踪鼠标轨迹。她只按你的设置记录应用名、窗口标题、媒体元数据和时长。
 
 建议先保守一点：
 
@@ -154,7 +160,7 @@ ProcessReporter 不截图，不记录键盘输入，不读取文件内容，也�
 
 ## 常见问题
 
-- 读不到窗口标题：在 System Settings -> Privacy & Security -> Accessibility 中启用 ProcessReporter，然后重启。
+- 读不到窗口标题：在 System Settings -> Privacy & Security -> Accessibility 中启用 Statusa，然后重启。
 - Shell 命令失败：用 Test 看 stdout/stderr，尽量使用工具的绝对路径。
 - 菜单栏图标不见：先在 Activity Monitor 确认应用还在，再重启应用。
 - 内存占用偏高：清理旧历史，降低上报频率。

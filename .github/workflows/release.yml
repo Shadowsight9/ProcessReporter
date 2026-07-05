@@ -29,6 +29,14 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Ad-hoc sign app
+        run: |
+          codesign --force --deep --sign - \
+            --options runtime \
+            --entitlements ProcessReporter/ProcessReporter.entitlements \
+            build/Build/Products/Release/ProcessReporter.app
+          codesign --verify --deep --strict --verbose=2 build/Build/Products/Release/ProcessReporter.app
+
       - name: Create dmg
         run: |
           hdiutil create -fs HFS+ -volname "ProcessReporter" -srcfolder build/Build/Products/Release/ProcessReporter.app build/ProcessReporter-arm64.dmg

@@ -1,6 +1,6 @@
 # ProcessReporter
 
-> Fork version maintained by Shadowsight9. This fork focuses on a cleaner modern SwiftUI/macOS codebase, shell-command based reporting, and removal of legacy service-specific integrations from the upstream project.
+> A macOS menu bar app that turns "what am I doing right now?" into data you can keep, map, and publish.
 
 [![macOS](https://img.shields.io/badge/macOS-15%2B-blue.svg)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange.svg)](https://swift.org/)
@@ -9,60 +9,70 @@
 
 [中文文档](README.zh-CN.md)
 
-ProcessReporter is a macOS menu bar app for recording focused applications, active window titles, and system media playback. Reports are stored locally and can optionally be sent to a shell command that you control.
+ProcessReporter watches your focused app, window title, foreground time, and now-playing media. Keep it local as a tiny activity diary, or pipe it into your own status page, bot, stream overlay, profile badge, or webhook.
+
+Examples:
+
+- `Browsing with Chrome`
+- `Playing Baldur's Gate 3, BGM: Song Title - Artist`
+- `Writing code in Xcode for 1.25 hours`
+- `Watching videos, probably "research"`
+
+## Why
+
+Most presence tools only know whether you are online. ProcessReporter can say what kind of online you are: surfing the web, coding, gaming, watching a show, listening to music, or anything else you map it to.
+
+Good uses:
+
+- Show your current surfing, gaming, coding, or music status on a personal site.
+- Send activity updates to a chat bot, dashboard, or webhook.
+- Keep a local timeline of focused apps and media playback.
+- Rename noisy app/window data into friendly public labels.
+- Filter sensitive apps before anything is stored or sent.
 
 ## Features
 
-- Tracks focused applications and window titles.
-- Reads system now-playing metadata through a local Swift provider.
-- Stores activity history locally with SwiftData.
-- Sends reports through one of four configurable shell command slots.
-- Supports application filters and mapping rules for privacy-friendly reporting.
-- Runs as a lightweight menu bar utility.
+- Menu bar app, lightweight and quiet.
+- Tracks focused app, window title, and app foreground duration.
+- Reads system now-playing metadata locally.
+- Stores history with SwiftData.
+- Sends reports through configurable shell commands.
+- Supports filters and mapping rules for privacy-friendly public status.
 
 ## Requirements
 
 - macOS 15.0 or later.
-- Xcode 15 or later for local development.
-- Accessibility permission when you want window titles.
+- Accessibility permission if you want window titles.
+- Xcode 15 or later for development.
 
-Media tracking uses Apple's private `MediaRemote.framework`. This removes the previous external `media-control` dependency, but it is intended for local tooling rather than App Store distribution.
+Media tracking uses Apple's private `MediaRemote.framework`, so this is local tooling, not an App Store-safe media API story.
 
-## Installation
+## Install
 
-1. Download the latest release from the Releases page.
-2. Open the `.dmg` file.
+1. Download the latest release.
+2. Open the `.dmg`.
 3. Drag ProcessReporter into Applications.
-4. Launch ProcessReporter.
-5. Enable Accessibility permission in System Settings when prompted.
+4. Launch it.
+5. Grant Accessibility permission when macOS asks.
 
-On first launch, the app opens Preferences so you can choose what to track and whether to enable shell reporting.
+On first launch, Preferences opens so you can choose what to track.
 
-## Configuration
+## Configure
 
-### General
+- General: enable reporting, set interval, choose app/media data.
+- Filters: exclude private apps before saving or sending.
+- Mapping: turn raw app names or bundle IDs into friendly descriptions.
+- Integrations: run shell commands with the latest report.
 
-Use Preferences -> General to enable or pause reporting, choose a reporting interval, and select whether process activity, media playback, or both should be included.
+Mapping is where the app becomes fun. Turn `Google Chrome` into `surfing the web`, `Steam` into `gaming`, or `Xcode` into `building something questionable`.
 
-### Filters
+## Shell
 
-Use Preferences -> Filters to exclude applications from process or media reporting. Filtered applications are skipped before reports are saved or sent.
+Shell is the only external integration. It is boring on purpose: you own the command, the destination, and the risk.
 
-### Mapping
+Open Preferences -> Integrations, enable Shell, enter a command, then use Test to inspect exit code, stdout, and stderr.
 
-Use Preferences -> Mapping to rename app names or bundle identifiers before a report is stored or sent. This is useful when raw app names are too noisy or too sensitive.
-
-### Shell Integration
-
-ProcessReporter has one built-in external integration: Shell.
-
-1. Open Preferences -> Integrations.
-2. Enable Shell.
-3. Pick a command slot and enter a command.
-4. Set a timeout.
-5. Use Test to inspect the latest exit code, stdout, and stderr.
-
-Example webhook command:
+Webhook example:
 
 ```sh
 curl -X POST "https://example.com/report" \
@@ -70,18 +80,38 @@ curl -X POST "https://example.com/report" \
   -d "$PROCESS_REPORTER_JSON"
 ```
 
-Example local log command:
+Local log example:
 
 ```sh
-mkdir -p /tmp/process-reporter-test
-printf '%s\n' "$PROCESS_REPORTER_JSON" >> /tmp/process-reporter-test/reports.jsonl
+mkdir -p /tmp/process-reporter
+printf '%s\n' "$PROCESS_REPORTER_JSON" >> /tmp/process-reporter/reports.jsonl
 ```
 
-The selected command slot runs locally through `/bin/zsh -lc` with the app user's permissions. Imported shell commands are forced disabled until you explicitly enable them.
+Human-readable status example:
 
-## Shell Environment
+```sh
+message="${PROCESS_REPORTER_PROCESS_DESCRIPTION:-Using ${PROCESS_REPORTER_PROCESS_NAME:-Unknown app}}"
 
-Every shell report receives these environment variables. Missing values are passed as empty strings.
+if [[ -n "$PROCESS_REPORTER_MEDIA_NAME" ]]; then
+  message="$message, BGM: $PROCESS_REPORTER_MEDIA_NAME"
+  if [[ -n "$PROCESS_REPORTER_MEDIA_ARTIST" ]]; then
+    message="$message - $PROCESS_REPORTER_MEDIA_ARTIST"
+  fi
+fi
+
+if [[ -n "$PROCESS_REPORTER_PROCESS_USAGE_DURATION" ]]; then
+  hours="$(awk "BEGIN { printf \"%.2f\", $PROCESS_REPORTER_PROCESS_USAGE_DURATION / 3600 }")"
+  message="$message for $hours hours"
+fi
+
+printf '%s\n' "$message"
+```
+
+Commands run through `/bin/zsh -lc` with your user permissions. Only run commands you understand.
+
+## Environment
+
+Every shell report gets these variables. Missing values are empty strings.
 
 - `PROCESS_REPORTER_JSON`
 - `PROCESS_REPORTER_PROCESS_NAME`
@@ -100,109 +130,46 @@ Every shell report receives these environment variables. Missing values are pass
 - `PROCESS_REPORTER_MEDIA_PLAYING`
 - `PROCESS_REPORTER_TIMESTAMP`
 
-`PROCESS_REPORTER_JSON` has this shape:
+`PROCESS_REPORTER_JSON` contains the same report as structured JSON, including process, media, and foreground usage data.
 
-```json
-{
-  "timestamp": "2026-07-05T12:00:00.000Z",
-  "process": {
-    "name": "Code",
-    "description": "Writing code",
-    "windowTitle": "ProcessReporter",
-    "bundleIdentifier": "com.microsoft.VSCode"
-  },
-  "media": {
-    "name": "Song Title",
-    "artist": "Artist",
-    "album": "Album",
-    "processName": "Music",
-    "processDescription": "Listening to music",
-    "bundleIdentifier": "com.apple.Music",
-    "duration": 240,
-    "elapsedTime": 42,
-    "playing": true
-  },
-  "foregroundUsage": {
-    "date": "2026-07-05",
-    "apps": [
-      {
-        "bundleIdentifier": "com.microsoft.VSCode",
-        "name": "Code",
-        "description": "Writing code",
-        "duration": 3600
-      }
-    ],
-    "totalDuration": 3600,
-    "currentBundleIdentifier": "com.microsoft.VSCode"
-  }
-}
-```
+## Privacy
 
-## Privacy Notes
+ProcessReporter does not take screenshots, record keystrokes, read file contents, or track mouse paths. It records app names, window titles, media metadata, and timing according to your settings.
 
-ProcessReporter does not capture screenshots, record keystrokes, inspect file contents, or track mouse movement paths. It records app names, focused window titles, and media metadata according to your preferences.
+Start private:
 
-Recommended setup:
-
-- Start with Shell disabled and inspect local history first.
+- Keep Shell disabled until local history looks right.
 - Filter password managers, banking apps, private browsers, and sensitive work tools.
-- Keep webhook URLs private.
-- Prefer HTTPS endpoints.
-- Only run shell commands you understand and trust.
+- Map raw names into vague public labels when publishing status.
+- Keep webhook URLs secret.
 
 ## Troubleshooting
 
-### Window Titles Are Missing
-
-Open System Settings -> Privacy & Security -> Accessibility and make sure ProcessReporter is enabled. Restart the app after changing the permission.
-
-### Shell Command Fails
-
-Use the Test button in Preferences -> Integrations. Check the exit code, stdout, and stderr. If a command works in Terminal but not in the app, use absolute paths for tools or initialize your environment inside the command.
-
-### Menu Bar Icon Is Missing
-
-Check Activity Monitor to see whether ProcessReporter is running. If it is running but the icon is hidden, restart the app and check macOS menu bar settings.
-
-### High Memory Usage
-
-Clear old history from Preferences -> History, reduce the report frequency, and avoid shell commands that emit very large stdout/stderr output.
+- Missing window titles: enable System Settings -> Privacy & Security -> Accessibility for ProcessReporter, then restart it.
+- Shell command fails: use Test, check stdout/stderr, prefer absolute paths.
+- Menu bar icon missing: confirm the app is running in Activity Monitor, then restart it.
+- High memory usage: clear old history and reduce report frequency.
 
 ## Development
 
-Open the project:
-
 ```sh
 open ProcessReporter.xcodeproj
-```
-
-Build from the command line:
-
-```sh
 xcodebuild -project ProcessReporter.xcodeproj -scheme ProcessReporter -configuration Debug build
 ```
 
-Current dependencies:
-
-- No third-party Swift packages are required.
-
-Alamofire, Discord Game SDK, S3 helpers, and service-specific integrations have been removed. New external reporting should go through `ShellReporterExtension`, not a new built-in service SDK.
+No third-party Swift packages are required. New external reporting should usually go through `ShellReporterExtension`, not a new built-in service SDK.
 
 Useful entry points:
 
 - `ProcessReporter/App/ProcessReporterApp.swift`
 - `ProcessReporter/Features/Reporting/Reporter.swift`
 - `ProcessReporter/Features/Reporting/Reporter+Shell.swift`
-- `ProcessReporter/Features/StatusMenu/StatusMenuView.swift`
-- `ProcessReporter/Features/StatusMenu/StatusMenuStore.swift`
 - `ProcessReporter/Features/Settings/PreferencesStore.swift`
-- `ProcessReporter/Features/Settings/SettingsRootView.swift`
 - `ProcessReporter/Features/Media/MediaInfoManager.swift`
-- `ProcessReporter/Features/Media/LocalMediaInfoProvider.swift`
 - `ProcessReporter/Features/History/DataStore.swift`
 
 ## License
 
-2025 © Innei, released under the MIT License.
+2026 © Shadowsight9, released under the MIT License.
 
-[Personal Website](https://innei.in/) · GitHub [@Innei](https://github.com/innei/)
+Forked from Innei's ProcessReporter. Original work © Innei, also released under the MIT License.

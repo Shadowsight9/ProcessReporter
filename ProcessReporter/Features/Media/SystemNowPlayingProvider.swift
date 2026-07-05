@@ -175,6 +175,7 @@ final class SystemNowPlayingProvider {
   private var latestMediaInfo: MediaInfo?
   private var didReceiveStreamState = false
   private var didStopIntentionally = false
+  private var restartDelay: TimeInterval = 1
 
   func startMonitoring(callback: @escaping MediaInfoManager.PlaybackStateChangedCallback) {
     stateQueue.async {
@@ -182,6 +183,7 @@ final class SystemNowPlayingProvider {
       self.latestMediaInfo = nil
       self.didReceiveStreamState = false
       self.didStopIntentionally = false
+      self.restartDelay = 1
       self.stopStreamLocked()
 
       do {
@@ -252,6 +254,7 @@ final class SystemNowPlayingProvider {
           DispatchQueue.main.async {
             callback(nil)
           }
+          self?.restartStreamAfterBackoffLocked()
         }
       }
     }
@@ -277,6 +280,27 @@ final class SystemNowPlayingProvider {
     stdoutPipe = nil
     stderrPipe = nil
     lineBuffer.removeAll(keepingCapacity: true)
+  }
+
+  private func restartStreamAfterBackoffLocked() {
+    guard callback != nil, !didStopIntentionally else { return }
+
+    let delay = restartDelay
+    restartDelay = min(restartDelay * 2, 30)
+    Self.logger.error("Now playing stream exited; restarting in \(delay, privacy: .public)s")
+
+    stateQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+      guard let self, self.callback != nil, !self.didStopIntentionally, self.process == nil else {
+        return
+      }
+
+      do {
+        try self.startStreamLocked()
+      } catch {
+        Self.logger.error("Failed to restart now playing stream: \(error.localizedDescription)")
+        self.restartStreamAfterBackoffLocked()
+      }
+    }
   }
 
   private func handleStreamDataLocked(_ data: Data) {
@@ -308,6 +332,7 @@ final class SystemNowPlayingProvider {
 
     latestMediaInfo = mediaInfo
     didReceiveStreamState = true
+    restartDelay = 1
 
     guard let callback else { return }
     DispatchQueue.main.async {

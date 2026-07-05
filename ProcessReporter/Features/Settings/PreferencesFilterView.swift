@@ -5,9 +5,10 @@
 //  Created by Innei on 2025/4/13.
 //
 
-import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+
+private let appTableSeparatorColor = Color.secondary.opacity(0.25)
 
 struct AppItem: Identifiable {
     let id = UUID()
@@ -55,7 +56,7 @@ struct ApplicationTableView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8).inset(by: 1))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+                    .stroke(appTableSeparatorColor, lineWidth: 1)
             )
             .padding(.top, 8)
             .frame(minHeight: 200)
@@ -114,7 +115,7 @@ struct ApplicationTableView: View {
                     .frame(width: 16, height: 16)
 
                     Rectangle().frame(width: 1, height: 16)
-                        .foregroundColor(Color(NSColor.separatorColor))
+                        .foregroundColor(appTableSeparatorColor)
 
                     Button(action: {
                         removeSelectedApps()
@@ -176,15 +177,16 @@ struct ApplicationTableView: View {
     }
 
     private func addApp(appId: String, url: URL) {
-        // Get app icon
-        let workspace = NSWorkspace.shared
-        let nsImage = workspace.icon(forFile: url.path)
-        let image = Image(nsImage: nsImage)
-
         // Check if app already exists in the list
         if !appItems.contains(where: { $0.name == url.deletingPathExtension().lastPathComponent }) {
             let appName = url.deletingPathExtension().lastPathComponent
-            appItems.append(AppItem(applicationIdentifier: appId, name: appName, icon: image))
+            appItems.append(
+                AppItem(
+                    applicationIdentifier: appId,
+                    name: appName,
+                    icon: AppUtility.shared.iconImage(forFileAt: url)
+                )
+            )
             saveFilteredApps()
         }
     }
@@ -214,11 +216,10 @@ struct ApplicationTableView: View {
     }
 
     private func showInFinder(applicationIdentifier: String) {
-        guard let appURL = AppUtility.shared.getAppInfo(for: applicationIdentifier).path else {
+        guard AppUtility.shared.revealInFinder(bundleID: applicationIdentifier) else {
             ToastManager.shared.error("Cannot find app")
             return
         }
-        NSWorkspace.shared.selectFile(appURL.path, inFileViewerRootedAtPath: "")
     }
 }
 
@@ -227,10 +228,20 @@ struct PreferencesFilterView: View {
     @State private var appItems: [AppItem] = []
     @State private var mediaItems: [AppItem] = []
 
-    @State private var tabId: String = "app"
+    @State private var selectedFilter: FilterCategory = .applications
+
     var body: some View {
-        TabView(selection: $tabId) {
-            Tab("Applications", systemImage: "app", value: "app") {
+        VStack(alignment: .trailing, spacing: 0) {
+            Picker("Filter Type", selection: $selectedFilter) {
+                Text("Applications").tag(FilterCategory.applications)
+                Text("Media Process").tag(FilterCategory.media)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 260)
+
+            switch selectedFilter {
+            case .applications:
                 ApplicationTableView(
                     appItems: $appItems,
                     title: "Filter Applications",
@@ -239,9 +250,8 @@ struct PreferencesFilterView: View {
                 ) { items in
                     store.saveFilteredProcesses(items.map { $0.applicationIdentifier })
                 }
-            }
 
-            Tab("Media Process", systemImage: "app", value: "media") {
+            case .media:
                 ApplicationTableView(
                     appItems: $mediaItems,
                     title: "Filter Media Processes",
@@ -266,13 +276,18 @@ struct PreferencesFilterView: View {
                 return AppItem(
                     applicationIdentifier: appId,
                     name: appInfo.displayName,
-                    icon: Image(nsImage: appInfo.icon)
+                    icon: AppUtility.shared.iconImage(for: appId)
                 )
             }
         }
 
         appItems = loadAppItems(from: store.filteredProcesses)
         mediaItems = loadAppItems(from: store.filteredMediaProcesses)
+    }
+
+    private enum FilterCategory: Hashable {
+        case applications
+        case media
     }
 }
 

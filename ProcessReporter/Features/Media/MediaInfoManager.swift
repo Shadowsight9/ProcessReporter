@@ -27,15 +27,7 @@ public class MediaInfoManager: NSObject {
   ) {
     playbackStateChangedCallback = callback
 
-    // Debounce rapid notifications
-    playbackDebounceCancellable?.cancel()
-    playbackDebounceCancellable =
-      playbackSubject
-      .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
-      .sink { info in
-        latestInfo = info
-        callback(info)
-      }
+    setupPlaybackSink(callback: callback)
 
     provider.startMonitoring { info in
       playbackSubject.send(info)
@@ -45,7 +37,15 @@ public class MediaInfoManager: NSObject {
   // Stop monitoring playback changes
   public static func stopMonitoringPlaybackChanges() {
     provider.stopMonitoring()
+    playbackDebounceCancellable?.cancel()
+    playbackDebounceCancellable = nil
     playbackStateChangedCallback = nil
+  }
+
+  public static func suspendMonitoringPlaybackChanges() {
+    provider.stopMonitoring()
+    playbackDebounceCancellable?.cancel()
+    playbackDebounceCancellable = nil
   }
 
   // Check if there's an active callback
@@ -65,14 +65,7 @@ public class MediaInfoManager: NSObject {
     // Small delay to ensure clean restart
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
       // Recreate debounced sink and restart provider
-      playbackDebounceCancellable?.cancel()
-      playbackDebounceCancellable =
-        playbackSubject
-        .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
-        .sink { info in
-          latestInfo = info
-          callback(info)
-        }
+      setupPlaybackSink(callback: callback)
       provider.startMonitoring { info in
         playbackSubject.send(info)
       }
@@ -80,7 +73,7 @@ public class MediaInfoManager: NSObject {
   }
 
   public static func getMediaInfo() -> MediaInfo? {
-    let info = provider.getMediaInfo()
+    let info = provider.getMediaInfo(timeout: 3.0)
     if let info = info {
       latestInfo = info
     }
@@ -96,6 +89,17 @@ public class MediaInfoManager: NSObject {
       latestInfo = info
     }
     return info
+  }
+
+  private static func setupPlaybackSink(callback: @escaping PlaybackStateChangedCallback) {
+    playbackDebounceCancellable?.cancel()
+    playbackDebounceCancellable =
+      playbackSubject
+      .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
+      .sink { info in
+        latestInfo = info
+        callback(info)
+      }
   }
 
 }
@@ -118,7 +122,7 @@ actor MediaInfoFetchActor {
   /// - Serial execution
   /// - Coalescing within 200ms
   /// - Returning the same in-flight Task when already running
-  /// - Timeout with external process interruption (for CLI provider)
+  /// - Timeout
   func requestInfo(using provider: MediaInfoProvider, timeout seconds: TimeInterval = 3.0)
     async throws -> MediaInfo?
   {
@@ -146,7 +150,7 @@ actor MediaInfoFetchActor {
       try await withThrowingTaskGroup(of: MediaInfo?.self) { group in
         group.addTask {
           // Run on a background thread, not on the actor
-          return provider.getMediaInfo()
+          return provider.getMediaInfo(timeout: seconds)
         }
         group.addTask {
           try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))

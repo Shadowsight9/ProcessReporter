@@ -13,5 +13,5 @@ protocol MediaInfoProvider {
   func stopMonitoring()
   
   /// Get current media information
-  func getMediaInfo() -> MediaInfo?
+  func getMediaInfo(timeout: TimeInterval) -> MediaInfo?
 }

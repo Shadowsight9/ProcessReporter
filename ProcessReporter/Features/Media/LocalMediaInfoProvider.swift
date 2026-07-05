@@ -7,31 +7,12 @@ import Combine
 import Foundation
 
 /// MediaInfoProvider implementation using private MediaRemote framework APIs
-/// Compatible with macOS versions before 15.4
-class LocalMediaInfoProvider: MediaInfoProvider {
-  
-  // MARK: - Private Framework Integration
-  
-  // Recreating the MRContent classes in Swift
-  @objc class MRContentItemMetadata: NSObject {
-    @objc var playbackState: Int = 0
-    @objc var bundleIdentifier: String?
-  }
-
-  @objc class MRContentItem: NSObject {
-    @objc var metadata: MRContentItemMetadata?
-
-    @objc init(nowPlayingInfo: NSDictionary) {
-      super.init()
-      // This is just a stub - actual initialization would be done by MediaRemote framework
-    }
-  }
+final class LocalMediaInfoProvider: MediaInfoProvider {
 
   // Type definitions for MediaRemote framework function pointers
   typealias MRMediaRemoteGetNowPlayingInfoFunction = @convention(c) (
     DispatchQueue, @escaping (NSDictionary?) -> Void
   ) -> Void
-  typealias MRMediaRemoteSetElapsedTimeFunction = @convention(c) (Double) -> Void
   typealias MRMediaRemoteGetNowPlayingApplicationIsPlayingFunction = @convention(c) (
     DispatchQueue, @escaping (Bool) -> Void
   ) -> Void
@@ -42,7 +23,29 @@ class LocalMediaInfoProvider: MediaInfoProvider {
     DispatchQueue
   ) -> Void
   
-  // MARK: - Properties
+  private struct MediaRemoteFunctions {
+    let bundle: CFBundle
+    let getNowPlayingInfo: MRMediaRemoteGetNowPlayingInfoFunction
+    let getNowPlayingApplicationIsPlaying: MRMediaRemoteGetNowPlayingApplicationIsPlayingFunction
+    let getNowPlayingApplicationPID: MRMediaRemoteGetNowPlayingApplicationPIDFunction
+    let registerForNowPlayingNotifications: MRMediaRemoteRegisterForNowPlayingNotificationsFunction?
+  }
+
+  private struct NowPlayingSnapshot {
+    let metadata: NSDictionary
+    let isPlaying: Bool
+    let pid: pid_t
+  }
+
+  private enum MediaRemoteKey {
+    static let title = "kMRMediaRemoteNowPlayingInfoTitle"
+    static let artist = "kMRMediaRemoteNowPlayingInfoArtist"
+    static let album = "kMRMediaRemoteNowPlayingInfoAlbum"
+    static let elapsedTime = "kMRMediaRemoteNowPlayingInfoElapsedTime"
+    static let duration = "kMRMediaRemoteNowPlayingInfoDuration"
+    static let artworkData = "kMRMediaRemoteNowPlayingInfoArtworkData"
+    static let artworkMIMEType = "kMRMediaRemoteNowPlayingInfoArtworkMIMEType"
+  }
   
   private static let playingStateChangedNotificationName =
     "kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification"
@@ -51,83 +54,161 @@ class LocalMediaInfoProvider: MediaInfoProvider {
   private static let infoChangedNotificationName =
     "kMRMediaRemoteNowPlayingInfoDidChangeNotification"
     
+  private static let frameworkURL = URL(
+    fileURLWithPath: "/System/Library/PrivateFrameworks/MediaRemote.framework")
+  private static let fetchTimeout: TimeInterval = 2.0
+
+  private let fetchQueue = DispatchQueue(
+    label: "ProcessReporter.LocalMediaInfoProvider.fetch",
+    qos: .userInitiated
+  )
+  private let mediaRemoteCallbackQueue = DispatchQueue(
+    label: "ProcessReporter.LocalMediaInfoProvider.mediaRemoteCallbacks",
+    qos: .userInitiated,
+    attributes: .concurrent
+  )
+  private let callbackLock = NSLock()
+  private let functionsLock = NSLock()
+  private let notificationSubject = PassthroughSubject<Void, Never>()
+
   private var cancellables = Set<AnyCancellable>()
   private var callback: MediaInfoManager.PlaybackStateChangedCallback?
-  private var isFrameworkLoaded = false
+  private var functions: MediaRemoteFunctions?
+  private var isMonitoring = false
+  private var didRegisterForNotifications = false
   
   // MARK: - MediaInfoProvider Implementation
   
   func startMonitoring(callback: @escaping MediaInfoManager.PlaybackStateChangedCallback) {
-    self.callback = callback
-    loadMediaRemoteFramework()
+    setCallback(callback)
+
+    guard let functions = loadMediaRemoteFunctions() else {
+      return
+    }
+
+    guard !isMonitoring else {
+      return
+    }
+
+    if !didRegisterForNotifications {
+      functions.registerForNowPlayingNotifications?(DispatchQueue.main)
+      didRegisterForNotifications = true
+    }
+
+    isMonitoring = true
+    subscribeToMediaRemoteNotifications()
+    scheduleCallbackFetch()
   }
   
   func stopMonitoring() {
     cancellables.removeAll()
-    callback = nil
-    isFrameworkLoaded = false
+    setCallback(nil)
+    isMonitoring = false
   }
   
-  func getMediaInfo() -> MediaInfo? {
-    guard let nowPlayingInfo = getNowPlayingInfo() else { return nil }
-    
-    let name = nowPlayingInfo["name"] as? String
-    let artist = nowPlayingInfo["artist"] as? String
-    let elapsedTime = nowPlayingInfo["elapsedTime"] as? Double ?? 0
-    let duration = nowPlayingInfo["duration"] as? Double ?? 0
-    let processID = nowPlayingInfo["processID"] as? Int ?? 0
-    let processName = nowPlayingInfo["processName"] as? String ?? ""
-    let executablePath = nowPlayingInfo["executablePath"] as? String ?? ""
-    let artworkData = nowPlayingInfo["artworkData"] as? String ?? ""
-    let playing = nowPlayingInfo["isPlaying"] as? Bool ?? false
-    let album = nowPlayingInfo["album"] as? String ?? ""
-
-    let pid = pid_t(processID)
-    let bundleID = AppUtility.getBundleIdentifierForPID(pid)
-
-    return MediaInfo(
-      name: name, artist: artist, album: album, image: artworkData, duration: duration,
-      elapsedTime: elapsedTime, processID: processID, processName: processName,
-      executablePath: executablePath, playing: playing,
-      applicationIdentifier: bundleID
-    )
+  func getMediaInfo(timeout: TimeInterval) -> MediaInfo? {
+    guard let snapshot = fetchNowPlayingSnapshot(timeout: timeout) else { return nil }
+    return makeMediaInfo(from: snapshot)
   }
   
   // MARK: - Private Methods
   
-  private func loadMediaRemoteFramework() {
-    guard !isFrameworkLoaded else { return }
-    
-    let url = URL(fileURLWithPath: "/System/Library/PrivateFrameworks/MediaRemote.framework")
-    guard let bundle = CFBundleCreate(kCFAllocatorDefault, url as CFURL) else {
-      print("Failed to load MediaRemote framework")
-      return
-    }
-
-    if let registerForNotifications = loadFunction(
-      "MRMediaRemoteRegisterForNowPlayingNotifications",
-      from: bundle,
-      as: MRMediaRemoteRegisterForNowPlayingNotificationsFunction.self
-    ) {
-      registerForNotifications(DispatchQueue.main)
-    }
-    
-    isFrameworkLoaded = true
-    
+  private func subscribeToMediaRemoteNotifications() {
     for name in [
-      Self.playingStateChangedNotificationName, 
+      Self.playingStateChangedNotificationName,
       Self.applicationChangedNotificationName,
       Self.infoChangedNotificationName,
     ] {
-      NotificationCenter.default.publisher(for: Notification.Name(name)).sink { _ in
-        if let callback = self.callback {
-          DispatchQueue.main.async {
-            guard let mediaInfo = self.getMediaInfo() else { return }
-            callback(mediaInfo)
-          }
+      NotificationCenter.default.publisher(for: Notification.Name(name))
+        .sink { [weak self] _ in
+          self?.notificationSubject.send()
         }
-      }.store(in: &cancellables)
+        .store(in: &cancellables)
     }
+    
+    notificationSubject
+      .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
+      .sink { [weak self] _ in
+        self?.scheduleCallbackFetch()
+      }
+      .store(in: &cancellables)
+  }
+
+  private func scheduleCallbackFetch() {
+    guard currentCallback != nil else { return }
+
+    fetchQueue.async { [weak self] in
+      guard let self = self else { return }
+      guard let mediaInfo = self.getMediaInfo(timeout: Self.fetchTimeout),
+        let callback = self.currentCallback
+      else {
+        return
+      }
+
+      DispatchQueue.main.async {
+        callback(mediaInfo)
+      }
+    }
+  }
+
+  private var currentCallback: MediaInfoManager.PlaybackStateChangedCallback? {
+    callbackLock.lock()
+    defer { callbackLock.unlock() }
+    return callback
+  }
+
+  private func setCallback(_ callback: MediaInfoManager.PlaybackStateChangedCallback?) {
+    callbackLock.lock()
+    self.callback = callback
+    callbackLock.unlock()
+  }
+
+  private func loadMediaRemoteFunctions() -> MediaRemoteFunctions? {
+    functionsLock.lock()
+    defer { functionsLock.unlock() }
+
+    if let functions = functions {
+      return functions
+    }
+    
+    guard let bundle = CFBundleCreate(kCFAllocatorDefault, Self.frameworkURL as CFURL) else {
+      print("Failed to load MediaRemote framework")
+      return nil
+    }
+    
+    guard
+      let getNowPlayingInfo = loadFunction(
+        "MRMediaRemoteGetNowPlayingInfo",
+        from: bundle,
+        as: MRMediaRemoteGetNowPlayingInfoFunction.self
+      ),
+      let getNowPlayingApplicationIsPlaying = loadFunction(
+        "MRMediaRemoteGetNowPlayingApplicationIsPlaying",
+        from: bundle,
+        as: MRMediaRemoteGetNowPlayingApplicationIsPlayingFunction.self
+      ),
+      let getNowPlayingApplicationPID = loadFunction(
+        "MRMediaRemoteGetNowPlayingApplicationPID",
+        from: bundle,
+        as: MRMediaRemoteGetNowPlayingApplicationPIDFunction.self
+      )
+    else {
+      return nil
+    }
+
+    let loadedFunctions = MediaRemoteFunctions(
+      bundle: bundle,
+      getNowPlayingInfo: getNowPlayingInfo,
+      getNowPlayingApplicationIsPlaying: getNowPlayingApplicationIsPlaying,
+      getNowPlayingApplicationPID: getNowPlayingApplicationPID,
+      registerForNowPlayingNotifications: loadFunction(
+        "MRMediaRemoteRegisterForNowPlayingNotifications",
+        from: bundle,
+        as: MRMediaRemoteRegisterForNowPlayingNotificationsFunction.self
+      )
+    )
+    functions = loadedFunctions
+    return loadedFunctions
   }
 
   private func loadFunction<T>(_ name: String, from bundle: CFBundle, as type: T.Type) -> T? {
@@ -137,261 +218,99 @@ class LocalMediaInfoProvider: MediaInfoProvider {
     return unsafeBitCast(pointer, to: type)
   }
   
-  private func getNowPlayingInfo() -> NSDictionary? {
-    var result: NSDictionary?
+  private func fetchNowPlayingSnapshot(timeout: TimeInterval) -> NowPlayingSnapshot? {
+    guard let functions = loadMediaRemoteFunctions() else { return nil }
+
     let group = DispatchGroup()
-    group.enter()
+    let resultLock = NSLock()
+
+    var metadata: NSDictionary?
+    var isPlaying = false
+    var pid: Int32 = 0
 
     autoreleasepool {
-      let url = URL(fileURLWithPath: "/System/Library/PrivateFrameworks/MediaRemote.framework")
-      guard let bundle = CFBundleCreate(kCFAllocatorDefault, url as CFURL) else {
-        group.leave()
-        return
-      }
-
-      guard
-        let getMRMediaRemoteGetNowPlayingInfo = loadFunction(
-          "MRMediaRemoteGetNowPlayingInfo",
-          from: bundle,
-          as: MRMediaRemoteGetNowPlayingInfoFunction.self
-        ),
-        let getMRMediaRemoteGetNowPlayingApplicationIsPlaying = loadFunction(
-          "MRMediaRemoteGetNowPlayingApplicationIsPlaying",
-          from: bundle,
-          as: MRMediaRemoteGetNowPlayingApplicationIsPlayingFunction.self
-        ),
-        let getMRMediaRemoteGetNowPlayingApplicationPID = loadFunction(
-          "MRMediaRemoteGetNowPlayingApplicationPID",
-          from: bundle,
-          as: MRMediaRemoteGetNowPlayingApplicationPIDFunction.self
-        )
-      else {
-        group.leave()
-        return
-      }
-
-      // Get playing status
-      var isPlaying = false
       group.enter()
-      getMRMediaRemoteGetNowPlayingApplicationIsPlaying(
-        DispatchQueue.global(qos: .default)
-      ) { playing in
+      functions.getNowPlayingApplicationIsPlaying(mediaRemoteCallbackQueue) { playing in
+        resultLock.lock()
         isPlaying = playing
+        resultLock.unlock()
         group.leave()
       }
 
-      // Get application PID
-      var pid: Int32 = 0
       group.enter()
-      getMRMediaRemoteGetNowPlayingApplicationPID(
-        DispatchQueue.global(qos: .default)
-      ) { applicationPID in
+      functions.getNowPlayingApplicationPID(mediaRemoteCallbackQueue) { applicationPID in
+        resultLock.lock()
         pid = applicationPID
+        resultLock.unlock()
         group.leave()
       }
 
-      // Get now playing information
-      getMRMediaRemoteGetNowPlayingInfo(
-        DispatchQueue.global(qos: .default)
-      ) { information in
-        guard let info = information else {
-          group.leave()
-          return
-        }
-
-        // Create MRContentItem instance using runtime
-        var item: NSObject?
-        if let MRContentItemClass = objc_getClass("MRContentItem") as? AnyClass {
-          // Create an instance of MRContentItem
-          let allocatedItem = class_createInstance(MRContentItemClass, 0) as? NSObject
-
-          // Call the initialization method manually
-          let selector = NSSelectorFromString("initWithNowPlayingInfo:")
-          if let allocatedItem = allocatedItem, allocatedItem.responds(to: selector) {
-            item = allocatedItem.perform(selector, with: info)?.takeUnretainedValue() as? NSObject
-          } else {
-            item = nil
-          }
-        } else {
-          item = nil
-        }
-        
-        // Extract all the media information (same as original implementation)
-        let name = info["kMRMediaRemoteNowPlayingInfoTitle"] as? String
-        let artist = info["kMRMediaRemoteNowPlayingInfoArtist"] as? String
-        let album = info["kMRMediaRemoteNowPlayingInfoAlbum"] as? String
-        let genre = info["kMRMediaRemoteNowPlayingInfoGenre"] as? String
-        let composer = info["kMRMediaRemoteNowPlayingInfoComposer"] as? String
-
-        // Extract playback information
-        let elapsedTime =
-          (info["kMRMediaRemoteNowPlayingInfoElapsedTime"] as? NSNumber)?.doubleValue ?? 0
-        let duration = (info["kMRMediaRemoteNowPlayingInfoDuration"] as? NSNumber)?.doubleValue ?? 0
-        let playbackRate =
-          (info["kMRMediaRemoteNowPlayingInfoPlaybackRate"] as? NSNumber)?.doubleValue ?? 0
-        let startTime =
-          (info["kMRMediaRemoteNowPlayingInfoStartTime"] as? NSNumber)?.doubleValue ?? 0
-
-        // Extract track information
-        let trackNumber = info["kMRMediaRemoteNowPlayingInfoTrackNumber"] as? NSNumber
-        let totalTrackCount = info["kMRMediaRemoteNowPlayingInfoTotalTrackCount"] as? NSNumber
-        let discNumber = info["kMRMediaRemoteNowPlayingInfoDiscNumber"] as? NSNumber
-        let totalDiscCount = info["kMRMediaRemoteNowPlayingInfoTotalDiscCount"] as? NSNumber
-        let chapterNumber = info["kMRMediaRemoteNowPlayingInfoChapterNumber"] as? NSNumber
-        let totalChapterCount = info["kMRMediaRemoteNowPlayingInfoTotalChapterCount"] as? NSNumber
-
-        // Extract queue information
-        let queueIndex = info["kMRMediaRemoteNowPlayingInfoQueueIndex"] as? NSNumber
-        let totalQueueCount = info["kMRMediaRemoteNowPlayingInfoTotalQueueCount"] as? NSNumber
-
-        // Extract playback mode
-        let shuffleMode = info["kMRMediaRemoteNowPlayingInfoShuffleMode"] as? NSNumber
-        let repeatMode = info["kMRMediaRemoteNowPlayingInfoRepeatMode"] as? NSNumber
-
-        // Extract miscellaneous information
-        let mediaType = info["kMRMediaRemoteNowPlayingInfoMediaType"] as? String
-        let isMusicApp = info["kMRMediaRemoteNowPlayingInfoIsMusicApp"] as? NSNumber
-        let uniqueIdentifier = info["kMRMediaRemoteNowPlayingInfoUniqueIdentifier"] as? String
-        let timestamp = info["kMRMediaRemoteNowPlayingInfoTimestamp"] as? Date
-
-        // Extract interaction states
-        let isAdvertisement = info["kMRMediaRemoteNowPlayingInfoIsAdvertisement"] as? NSNumber
-        let isBanned = info["kMRMediaRemoteNowPlayingInfoIsBanned"] as? NSNumber
-        let isInWishList = info["kMRMediaRemoteNowPlayingInfoIsInWishList"] as? NSNumber
-        let isLiked = info["kMRMediaRemoteNowPlayingInfoIsLiked"] as? NSNumber
-        let prohibitsSkip = info["kMRMediaRemoteNowPlayingInfoProhibitsSkip"] as? NSNumber
-
-        // Extract radio information
-        let radioStationIdentifier =
-          info["kMRMediaRemoteNowPlayingInfoRadioStationIdentifier"] as? String
-        let radioStationHash = info["kMRMediaRemoteNowPlayingInfoRadioStationHash"] as? String
-
-        // Extract supported features
-        let supportsFastForward15Seconds =
-          info["kMRMediaRemoteNowPlayingInfoSupportsFastForward15Seconds"] as? NSNumber
-        let supportsRewind15Seconds =
-          info["kMRMediaRemoteNowPlayingInfoSupportsRewind15Seconds"] as? NSNumber
-        let supportsIsBanned = info["kMRMediaRemoteNowPlayingInfoSupportsIsBanned"] as? NSNumber
-        let supportsIsLiked = info["kMRMediaRemoteNowPlayingInfoSupportsIsLiked"] as? NSNumber
-
-        // Get playback state
-        var playbackState: String?
-        if item?.responds(to: #selector(getter: MRContentItem.metadata)) == true,
-          let metadata = item?.value(forKey: "metadata") as? NSObject,
-          metadata.responds(to: #selector(getter: MRContentItemMetadata.playbackState)) == true,
-          let playbackStateValue = metadata.value(forKey: "playbackState") as? NSNumber
-        {
-          playbackState = String(format: "%ld", playbackStateValue.intValue)
-        }
-
-        // Get bundle identifier
-        var bundleIdentifier: String?
-        if item?.responds(to: #selector(getter: MRContentItem.metadata)) == true,
-          let metadata = item?.value(forKey: "metadata") as? NSObject,
-          metadata.responds(to: #selector(getter: MRContentItemMetadata.bundleIdentifier)) == true
-        {
-          bundleIdentifier = metadata.value(forKey: "bundleIdentifier") as? String
-        }
-
-        // Get artwork
-        let artworkData = info["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data
-        let artworkMIMEType = info["kMRMediaRemoteNowPlayingInfoArtworkMIMEType"] as? String
-
-        // Process artwork data
-        var artworkBase64 = ""
-        if let data = artworkData {
-          if artworkMIMEType == "image/png" || artworkMIMEType == "image/jpeg" {
-            artworkBase64 = data.base64EncodedString(options: [])
-          } else {
-            if let image = NSImage(data: data) {
-              if let tiffData = image.tiffRepresentation {
-                artworkBase64 = tiffData.base64EncodedString(options: [])
-              }
-            }
-          }
-        }
-
-        // Get process information
-        let app = NSRunningApplication(processIdentifier: pid)
-        let processName = app?.localizedName ?? ""
-        let executablePath = app?.executableURL?.path ?? ""
-
-        // Create result dictionary
-        result = [
-          // Basic information
-          "name": name ?? "",
-          "artist": artist ?? "",
-          "album": album ?? "",
-          "genre": genre ?? "",
-          "composer": composer ?? "",
-
-          // Playback information
-          "elapsedTime": NSNumber(value: elapsedTime),
-          "duration": NSNumber(value: duration),
-          "playbackRate": NSNumber(value: playbackRate),
-          "startTime": NSNumber(value: startTime),
-          "playbackState": playbackState ?? "",
-
-          // Track information
-          "trackNumber": trackNumber ?? 0,
-          "totalTrackCount": totalTrackCount ?? 0,
-          "discNumber": discNumber ?? 0,
-          "totalDiscCount": totalDiscCount ?? 0,
-          "chapterNumber": chapterNumber ?? 0,
-          "totalChapterCount": totalChapterCount ?? 0,
-
-          // Queue information
-          "queueIndex": queueIndex ?? 0,
-          "totalQueueCount": totalQueueCount ?? 0,
-
-          // Playback mode
-          "shuffleMode": shuffleMode ?? 0,
-          "repeatMode": repeatMode ?? 0,
-
-          // Miscellaneous information
-          "mediaType": mediaType ?? "",
-          "isMusicApp": isMusicApp ?? false,
-          "uniqueIdentifier": uniqueIdentifier ?? "",
-          "timestamp": timestamp ?? Date(),
-          "bundleIdentifier": bundleIdentifier ?? "",
-
-          // Interaction states
-          "isAdvertisement": isAdvertisement ?? false,
-          "isBanned": isBanned ?? false,
-          "isInWishList": isInWishList ?? false,
-          "isLiked": isLiked ?? false,
-          "prohibitsSkip": prohibitsSkip ?? false,
-
-          // Radio information
-          "radioStationIdentifier": radioStationIdentifier ?? "",
-          "radioStationHash": radioStationHash ?? "",
-
-          // Supported features
-          "supportsFastForward15Seconds": supportsFastForward15Seconds ?? false,
-          "supportsRewind15Seconds": supportsRewind15Seconds ?? false,
-          "supportsIsBanned": supportsIsBanned ?? false,
-          "supportsIsLiked": supportsIsLiked ?? false,
-
-          // Artwork
-          "artworkData": artworkBase64,
-          "artworkMIMEType": artworkMIMEType ?? "",
-
-          // Playback status
-          "isPlaying": NSNumber(value: isPlaying),
-
-          // Process information
-          "processID": NSNumber(value: pid),
-          "processName": processName,
-          "executablePath": executablePath,
-        ]
-
+      group.enter()
+      functions.getNowPlayingInfo(mediaRemoteCallbackQueue) { information in
+        resultLock.lock()
+        metadata = information
+        resultLock.unlock()
         group.leave()
       }
     }
 
-    guard group.wait(timeout: .now() + 2.0) == .success else {
+    guard group.wait(timeout: .now() + timeout) == .success else {
       return nil
     }
-    return result
+
+    resultLock.lock()
+    defer { resultLock.unlock() }
+
+    guard let metadata = metadata else { return nil }
+    return NowPlayingSnapshot(metadata: metadata, isPlaying: isPlaying, pid: pid_t(pid))
+  }
+
+  private func makeMediaInfo(from snapshot: NowPlayingSnapshot) -> MediaInfo {
+    let runningApplication = NSRunningApplication(processIdentifier: snapshot.pid)
+    let processID = Int(snapshot.pid)
+    let processName = runningApplication?.localizedName ?? ""
+    let executablePath = runningApplication?.executableURL?.path ?? ""
+    let bundleIdentifier =
+      runningApplication?.bundleIdentifier ?? AppUtility.getBundleIdentifierForPID(snapshot.pid)
+
+    return MediaInfo(
+      name: stringValue(snapshot.metadata, for: MediaRemoteKey.title),
+      artist: stringValue(snapshot.metadata, for: MediaRemoteKey.artist),
+      album: stringValue(snapshot.metadata, for: MediaRemoteKey.album),
+      image: artworkBase64(from: snapshot.metadata),
+      duration: doubleValue(snapshot.metadata, for: MediaRemoteKey.duration),
+      elapsedTime: doubleValue(snapshot.metadata, for: MediaRemoteKey.elapsedTime),
+      processID: processID,
+      processName: processName,
+      executablePath: executablePath,
+      playing: snapshot.isPlaying,
+      applicationIdentifier: bundleIdentifier
+    )
+  }
+
+  private func stringValue(_ metadata: NSDictionary, for key: String) -> String? {
+    guard let value = metadata[key] as? String else { return nil }
+    return value.isEmpty ? nil : value
+  }
+
+  private func doubleValue(_ metadata: NSDictionary, for key: String) -> Double {
+    return (metadata[key] as? NSNumber)?.doubleValue ?? 0
+  }
+
+  private func artworkBase64(from metadata: NSDictionary) -> String? {
+    guard let data = metadata[MediaRemoteKey.artworkData] as? Data, !data.isEmpty else {
+      return nil
+    }
+
+    let mimeType = metadata[MediaRemoteKey.artworkMIMEType] as? String
+    if mimeType == "image/png" || mimeType == "image/jpeg" {
+      return data.base64EncodedString(options: [])
+    }
+
+    if let image = NSImage(data: data), let tiffData = image.tiffRepresentation {
+      return tiffData.base64EncodedString(options: [])
+    }
+
+    return data.base64EncodedString(options: [])
   }
 }

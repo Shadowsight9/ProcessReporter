@@ -327,6 +327,7 @@ class Reporter {
 	private func dispose() {
 		ApplicationMonitor.shared.stopMouseMonitoring()
 		ApplicationMonitor.shared.stopWindowFocusMonitoring()
+		MediaInfoManager.stopMonitoringPlaybackChanges()
 
 		statusBridge.updateStatus(.paused)
 	}

@@ -7,6 +7,7 @@
 
 import AppKit
 import Foundation
+import SwiftUI
 
 /// 应用信息缓存结构
 struct AppInfo {
@@ -84,6 +85,23 @@ class AppUtility {
         appInfoCache[bundleID] = appInfo
 
         return appInfo
+    }
+
+    func iconImage(for bundleID: String) -> Image {
+        Image(nsImage: getAppInfo(for: bundleID).icon)
+    }
+
+    func iconImage(forFileAt url: URL) -> Image {
+        Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+    }
+
+    @discardableResult
+    func revealInFinder(bundleID: String) -> Bool {
+        guard let appURL = getAppInfo(for: bundleID).path else {
+            return false
+        }
+
+        return NSWorkspace.shared.selectFile(appURL.path, inFileViewerRootedAtPath: "")
     }
 
     /// 根据应用名称查找 Bundle ID

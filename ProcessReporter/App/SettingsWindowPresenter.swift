@@ -9,6 +9,8 @@ final class SettingsWindowPresenter: NSObject, NSWindowDelegate {
     private let size = NSSize(width: 760, height: 520)
 
     func showWindow() {
+        setupMenu()
+
         if let window, window.isVisible {
             window.makeKeyAndOrderFront(nil)
         } else {
@@ -46,6 +48,7 @@ final class SettingsWindowPresenter: NSObject, NSWindowDelegate {
 
     func windowDidBecomeKey(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        setupMenu()
         NSApplication.shared.activate()
     }
 

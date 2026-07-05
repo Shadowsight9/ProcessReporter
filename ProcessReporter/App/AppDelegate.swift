@@ -14,6 +14,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenu()
+        DispatchQueue.main.async {
+            setupMenu()
+        }
 
         // 初始设置为 accessory 模式（不显示 Dock 图标）
         NSApp.setActivationPolicy(.accessory)
@@ -92,8 +95,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Stop media monitoring to free resources
-        MediaInfoManager.stopMonitoringPlaybackChanges()
+        // Pause media monitoring but keep the callback so wake handling can restore it.
+        MediaInfoManager.suspendMonitoringPlaybackChanges()
 
         // Save any pending database changes via DataStore
         Task {

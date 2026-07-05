@@ -15,14 +15,11 @@ class PreferencesDataModel {
             "isEnabled": PreferencesDataModel.isEnabled.value,
             "reportOnFocusChange": PreferencesDataModel.reportOnFocusChange.value,
             "sendInterval": PreferencesDataModel.sendInterval.value.rawValue,
-            "enabledTypes": PreferencesDataModel.enabledTypes.value.toStorable() ?? [
-                Reporter.Types.media.rawValue, Reporter.Types.process.rawValue,
-            ],
+            "enabledTypes": PreferencesDataModel.enabledTypes.value.toStorable() ?? [Reporter.Types.media.rawValue, Reporter.Types.process.rawValue],
             "shellIntegration": PreferencesDataModel.shellIntegration.value.toDictionary(),
             "ignoreNullArtist": PreferencesDataModel.ignoreNullArtist.value,
             "filteredProcesses": PreferencesDataModel.filteredProcesses.value,
             "filteredMediaProcesses": PreferencesDataModel.filteredMediaProcesses.value,
-
             "mappingList": PreferencesDataModel.mappingList.value.toDictionary(),
         ]
     }
@@ -39,8 +36,7 @@ class PreferencesDataModel {
 	public static func importFromPlist(data: Data) -> Bool {
 		do {
 			guard
-				let dictionary = try PropertyListSerialization.propertyList(
-					from: data, options: [], format: nil) as? [String: Any]
+				let dictionary = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
 			else {
 				return false
 			}
@@ -51,9 +47,7 @@ class PreferencesDataModel {
             if let reportOnFocusChange = dictionary["reportOnFocusChange"] as? Bool {
                 PreferencesDataModel.reportOnFocusChange.accept(reportOnFocusChange)
 			}
-			if let sendIntervalRaw = dictionary["sendInterval"] as? Int,
-			   let sendInterval = SendInterval(rawValue: sendIntervalRaw)
-			{
+			if let sendIntervalRaw = dictionary["sendInterval"] as? Int, let sendInterval = SendInterval(rawValue: sendIntervalRaw) {
 				PreferencesDataModel.sendInterval.accept(sendInterval)
 			}
             if let shellDict = dictionary["shellIntegration"] as? [String: Any] {

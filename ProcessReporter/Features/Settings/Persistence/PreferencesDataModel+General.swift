@@ -17,8 +17,7 @@ extension PreferencesDataModel {
     @UserDefaultsRelay("reportOnFocusChange", defaultValue: true)
     static var reportOnFocusChange: BehaviorRelay<Bool>
 
-    @UserDefaultsRelay(
-        "enabledTypes", defaultValue: ReporterTypesSet(types: [.media, .process]))
+    @UserDefaultsRelay("enabledTypes", defaultValue: ReporterTypesSet(types: [.media, .process]))
     static var enabledTypes: BehaviorRelay<ReporterTypesSet>
     
     @UserDefaultsRelay("ignoreNullName", defaultValue: true)

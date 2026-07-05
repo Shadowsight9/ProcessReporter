@@ -10,14 +10,8 @@ public class MediaInfoManager: NSObject {
   // Callback for when playback state changes
   public typealias PlaybackStateChangedCallback = (MediaInfo) -> Void
 
-  // Media info provider based on macOS version
-  private static var provider: MediaInfoProvider = {
-    if #available(macOS 15.4, *) {
-      return CLIMediaInfoProvider()
-    } else {
-      return LegacyMediaInfoProvider()
-    }
-  }()
+  // Local provider backed by MediaRemote.framework.
+  private static var provider: MediaInfoProvider = LocalMediaInfoProvider()
 
   // Cache the latest media info to avoid synchronous CLI calls on the main thread
   private static var latestInfo: MediaInfo?
@@ -68,11 +62,6 @@ public class MediaInfoManager: NSObject {
     // Stop current monitoring
     provider.stopMonitoring()
 
-    // Reset failure counters if provider supports it
-    if let cliProvider = provider as? CLIMediaInfoProvider {
-      cliProvider.resetFailureCounter()
-    }
-
     // Small delay to ensure clean restart
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
       // Recreate debounced sink and restart provider
@@ -91,10 +80,6 @@ public class MediaInfoManager: NSObject {
   }
 
   public static func getMediaInfo() -> MediaInfo? {
-    // Avoid blocking the main thread with synchronous CLI calls
-    if Thread.isMainThread, provider is CLIMediaInfoProvider {
-      return latestInfo
-    }
     let info = provider.getMediaInfo()
     if let info = info {
       latestInfo = info
@@ -174,10 +159,6 @@ actor MediaInfoFetchActor {
           return result
         } catch {
           group.cancelAll()
-          // On timeout/cancellation, try interrupting the CLI process if applicable
-          if let cli = provider as? CLIMediaInfoProvider {
-            cli.interruptCurrentExecProcess()
-          }
           throw error
         }
       }

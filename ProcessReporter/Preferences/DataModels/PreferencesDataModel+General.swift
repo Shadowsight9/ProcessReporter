@@ -26,8 +26,6 @@ extension PreferencesDataModel {
     @UserDefaultsRelay("ignoreNullName", defaultValue: true)
     static var ignoreNullArtist: BehaviorRelay<Bool>
     
-    @UserDefaultsRelay("hasShownMediaControlInstallPrompt", defaultValue: false)
-    static var hasShownMediaControlInstallPrompt: BehaviorRelay<Bool>
 }
 
 extension Reporter.Types: UserDefaultsStorable {

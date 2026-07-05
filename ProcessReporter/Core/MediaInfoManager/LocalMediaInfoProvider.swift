@@ -1,4 +1,4 @@
-// LegacyMediaInfoProvider.swift
+// LocalMediaInfoProvider.swift
 // ProcessReporter
 // Created by Claude on 2025/7/12.
 
@@ -8,7 +8,7 @@ import Foundation
 
 /// MediaInfoProvider implementation using private MediaRemote framework APIs
 /// Compatible with macOS versions before 15.4
-class LegacyMediaInfoProvider: MediaInfoProvider {
+class LocalMediaInfoProvider: MediaInfoProvider {
   
   // MARK: - Private Framework Integration
   
@@ -38,6 +38,9 @@ class LegacyMediaInfoProvider: MediaInfoProvider {
   typealias MRMediaRemoteGetNowPlayingApplicationPIDFunction = @convention(c) (
     DispatchQueue, @escaping (Int32) -> Void
   ) -> Void
+  typealias MRMediaRemoteRegisterForNowPlayingNotificationsFunction = @convention(c) (
+    DispatchQueue
+  ) -> Void
   
   // MARK: - Properties
   
@@ -62,6 +65,7 @@ class LegacyMediaInfoProvider: MediaInfoProvider {
   func stopMonitoring() {
     cancellables.removeAll()
     callback = nil
+    isFrameworkLoaded = false
   }
   
   func getMediaInfo() -> MediaInfo? {
@@ -95,9 +99,17 @@ class LegacyMediaInfoProvider: MediaInfoProvider {
     guard !isFrameworkLoaded else { return }
     
     let url = URL(fileURLWithPath: "/System/Library/PrivateFrameworks/MediaRemote.framework")
-    guard CFBundleCreate(kCFAllocatorDefault, url as CFURL) != nil else {
+    guard let bundle = CFBundleCreate(kCFAllocatorDefault, url as CFURL) else {
       print("Failed to load MediaRemote framework")
       return
+    }
+
+    if let registerForNotifications = loadFunction(
+      "MRMediaRemoteRegisterForNowPlayingNotifications",
+      from: bundle,
+      as: MRMediaRemoteRegisterForNowPlayingNotificationsFunction.self
+    ) {
+      registerForNotifications(DispatchQueue.main)
     }
     
     isFrameworkLoaded = true
@@ -117,6 +129,13 @@ class LegacyMediaInfoProvider: MediaInfoProvider {
       }.store(in: &cancellables)
     }
   }
+
+  private func loadFunction<T>(_ name: String, from bundle: CFBundle, as type: T.Type) -> T? {
+    guard let pointer = CFBundleGetFunctionPointerForName(bundle, name as CFString) else {
+      return nil
+    }
+    return unsafeBitCast(pointer, to: type)
+  }
   
   private func getNowPlayingInfo() -> NSDictionary? {
     var result: NSDictionary?
@@ -130,25 +149,26 @@ class LegacyMediaInfoProvider: MediaInfoProvider {
         return
       }
 
-      // Get function pointers from the framework
-      let getMRMediaRemoteGetNowPlayingInfo = unsafeBitCast(
-        CFBundleGetFunctionPointerForName(bundle, "MRMediaRemoteGetNowPlayingInfo" as CFString),
-        to: MRMediaRemoteGetNowPlayingInfoFunction.self
-      )
-
-      let getMRMediaRemoteGetNowPlayingApplicationIsPlaying = unsafeBitCast(
-        CFBundleGetFunctionPointerForName(
-          bundle, "MRMediaRemoteGetNowPlayingApplicationIsPlaying" as CFString
+      guard
+        let getMRMediaRemoteGetNowPlayingInfo = loadFunction(
+          "MRMediaRemoteGetNowPlayingInfo",
+          from: bundle,
+          as: MRMediaRemoteGetNowPlayingInfoFunction.self
         ),
-        to: MRMediaRemoteGetNowPlayingApplicationIsPlayingFunction.self
-      )
-
-      let getMRMediaRemoteGetNowPlayingApplicationPID = unsafeBitCast(
-        CFBundleGetFunctionPointerForName(
-          bundle, "MRMediaRemoteGetNowPlayingApplicationPID" as CFString
+        let getMRMediaRemoteGetNowPlayingApplicationIsPlaying = loadFunction(
+          "MRMediaRemoteGetNowPlayingApplicationIsPlaying",
+          from: bundle,
+          as: MRMediaRemoteGetNowPlayingApplicationIsPlayingFunction.self
         ),
-        to: MRMediaRemoteGetNowPlayingApplicationPIDFunction.self
-      )
+        let getMRMediaRemoteGetNowPlayingApplicationPID = loadFunction(
+          "MRMediaRemoteGetNowPlayingApplicationPID",
+          from: bundle,
+          as: MRMediaRemoteGetNowPlayingApplicationPIDFunction.self
+        )
+      else {
+        group.leave()
+        return
+      }
 
       // Get playing status
       var isPlaying = false
@@ -369,7 +389,9 @@ class LegacyMediaInfoProvider: MediaInfoProvider {
       }
     }
 
-    group.wait()
+    guard group.wait(timeout: .now() + 2.0) == .success else {
+      return nil
+    }
     return result
   }
 }

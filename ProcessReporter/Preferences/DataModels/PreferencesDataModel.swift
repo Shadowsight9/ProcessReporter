@@ -20,14 +20,10 @@ class PreferencesDataModel {
             "enabledTypes": PreferencesDataModel.enabledTypes.value.toStorable() ?? [
                 Reporter.Types.media.rawValue, Reporter.Types.process.rawValue,
             ],
-            "mixSpaceIntegration": PreferencesDataModel.mixSpaceIntegration.value.toDictionary(),
-            "slackIntegration": PreferencesDataModel.slackIntegration.value.toDictionary(),
-            "s3Integration": PreferencesDataModel.s3Integration.value.toDictionary(),
-            "discordIntegration": PreferencesDataModel.discordIntegration.value.toDictionary(),
+            "shellIntegration": PreferencesDataModel.shellIntegration.value.toDictionary(),
             "ignoreNullArtist": PreferencesDataModel.ignoreNullArtist.value,
             "filteredProcesses": PreferencesDataModel.filteredProcesses.value,
             "filteredMediaProcesses": PreferencesDataModel.filteredMediaProcesses.value,
-            "hasShownMediaControlInstallPrompt": PreferencesDataModel.hasShownMediaControlInstallPrompt.value,
 
             "mappingList": PreferencesDataModel.mappingList.value.toDictionary(),
         ]
@@ -62,21 +58,10 @@ class PreferencesDataModel {
 			{
 				PreferencesDataModel.sendInterval.accept(sendInterval)
 			}
-			if let mixSpaceDict = dictionary["mixSpaceIntegration"] as? [String: Any] {
-				PreferencesDataModel.mixSpaceIntegration.accept(
-					MixSpaceIntegration.fromDictionary(mixSpaceDict))
-			}
-			if let slackDict = dictionary["slackIntegration"] as? [String: Any] {
-				PreferencesDataModel.slackIntegration.accept(
-					SlackIntegration.fromDictionary(slackDict))
-			}
-            if let s3Dict = dictionary["s3Integration"] as? [String: Any] {
-                PreferencesDataModel.s3Integration.accept(
-                    S3Integration.fromDictionary(s3Dict))
-            }
-            if let discordDict = dictionary["discordIntegration"] as? [String: Any] {
-                PreferencesDataModel.discordIntegration.accept(
-                    DiscordIntegration.fromDictionary(discordDict))
+            if let shellDict = dictionary["shellIntegration"] as? [String: Any] {
+                var shellIntegration = ShellIntegration.fromDictionary(shellDict)
+                shellIntegration.isEnabled = false
+                PreferencesDataModel.shellIntegration.accept(shellIntegration)
             }
             if let enabledTypesArray = dictionary["enabledTypes"] as? [String] {
                 let enabledTypesSet = ReporterTypesSet(
@@ -92,9 +77,6 @@ class PreferencesDataModel {
 			}
 			if let filteredMediaProcesses = dictionary["filteredMediaProcesses"] as? [String] {
 				PreferencesDataModel.filteredMediaProcesses.accept(filteredMediaProcesses)
-			}
-			if let hasShownMediaControlInstallPrompt = dictionary["hasShownMediaControlInstallPrompt"] as? Bool {
-				PreferencesDataModel.hasShownMediaControlInstallPrompt.accept(hasShownMediaControlInstallPrompt)
 			}
 
 			if let mapping = dictionary["mappingList"] as? [String: Any] {

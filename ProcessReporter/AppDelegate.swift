@@ -7,8 +7,11 @@
 
 import Cocoa
 import IOKit.pwr_mgt
+import os
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ProcessReporter", category: "AppDelegate")
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 初始设置为 accessory 模式（不显示 Dock 图标）
         NSApp.setActivationPolicy(.accessory)
@@ -20,10 +23,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if !PreferencesDataModel.shared.isEnabled.value {
                 self?.showSettings()
             }
-        }
-        // Check for media-control installation after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            MediaControlInstallationHelper.checkAndPromptInstallation()
         }
 
         #if DEBUG
@@ -71,12 +70,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func willSleep() {
-        print("System will sleep - cleaning up caches...")
+        logger.info("System will sleep - cleaning up caches")
         cleanupCachesBeforeSleep()
     }
 
     @objc private func didWake() {
-        print("System did wake - reinitializing components...")
+        logger.info("System did wake - reinitializing components")
         reinitializeAfterWake()
     }
 
@@ -99,7 +98,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await DataStore.shared.flush()
         }
 
-        print("Cache cleanup completed before sleep")
+        logger.info("Cache cleanup completed before sleep")
     }
 
     private func reinitializeAfterWake() {
@@ -119,7 +118,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        print("Components reinitialized after wake")
+        logger.info("Components reinitialized after wake")
     }
 
     deinit {

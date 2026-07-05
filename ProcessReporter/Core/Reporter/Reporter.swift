@@ -1,4 +1,5 @@
 import Cocoa
+import os
 import RxSwift
 
 enum ReporterError: Error {
@@ -20,6 +21,7 @@ struct ReporterOptions {
 
 @MainActor
 class Reporter {
+	private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ProcessReporter", category: "Reporter")
 	private var mapping = [String: ReporterOptions]()
 	private var statusItemManager = ReporterStatusItemManager()
 
@@ -42,7 +44,7 @@ class Reporter {
 
 	// Handle wake from sleep - reinitialize components if needed
 	public func handleWakeFromSleep() {
-		print("[Reporter] Handling wake from sleep - reinitializing components...")
+		logger.info("Handling wake from sleep - reinitializing components")
 
 		// Clear caches that might be stale after sleep
 		clearCaches()
@@ -53,7 +55,7 @@ class Reporter {
 			ApplicationMonitor.shared.startWindowFocusMonitoring()
 		}
 
-		print("[Reporter] Wake from sleep handling completed")
+		logger.info("Wake from sleep handling completed")
 	}
 
 	// Register a reporter extension
@@ -116,11 +118,11 @@ class Reporter {
 					return false
 				case .databaseError(let message):
 					failureNames.append(name)
-					NSLog("\(name) database error: \(message)")
+					logger.error("\(name) database error: \(message)")
 					return true
 				default:
 					failureNames.append(name)
-					NSLog("\(name) failed: \(error)")
+					logger.error("\(name) failed: \(String(describing: error))")
 					return true
 				}
 			}
@@ -363,10 +365,7 @@ class Reporter {
 	private func initializeExtensions() {
 		// Register all reporter extensions
 		let extensions: [ReporterExtension] = [
-			MixSpaceReporterExtension(),
-			S3ReporterExtension(),
-			SlackReporterExtension(),
-			DiscordReporterExtension(),
+			ShellReporterExtension(),
 		]
 
 		for ext in extensions {
@@ -453,12 +452,7 @@ extension Reporter {
 		}
 
 		// Subscribe to extension configuration changes
-		let d3 = Observable.combineLatest(
-			preferences.mixSpaceIntegration,
-			preferences.s3Integration,
-			preferences.slackIntegration,
-			preferences.discordIntegration
-		).subscribe { [weak self] _ in
+		let d3 = preferences.shellIntegration.subscribe { [weak self] _ in
 			guard let self = self else { return }
 			Task {
 				await self.updateExtensions()

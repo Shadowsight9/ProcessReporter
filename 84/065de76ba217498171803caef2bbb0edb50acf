@@ -1,0 +1,25 @@
+.github/workflows/release.yml
+  s_e3ea14f4a097b1::t_43d3bc45bdbf4d 32,34,45,53
+ProcessReporter/Assets.xcassets/MascotAppIcon.appiconset/Contents.json
+  s_e3ea14f4a097b1::t_8a81251e44be40 1-68
+readme.md
+  s_e3ea14f4a097b1::t_a0f83aa2091724 60-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "84065de76ba217498171803caef2bbb0edb50acf",
+  "prompts": {},
+  "sessions": {
+    "s_e3ea14f4a097b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f32ef-609c-7d21-9375-1477a66a6a09",
+        "model": "unknown"
+      },
+      "human_author": "huangzheng.368 <huangzheng.368@outlook.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}

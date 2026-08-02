@@ -104,11 +104,6 @@ class ApplicationMonitor {
     }
 
     func getFocusedWindowInfo() -> FocusedWindowInfo? {
-        guard isAccessibilityEnabled() else {
-            showAccessibilityToastIfNeeded()
-            return nil
-        }
-
         guard let app = NSWorkspace.shared.frontmostApplication else {
             return nil
         }
@@ -120,7 +115,13 @@ class ApplicationMonitor {
 
         let appName = app.localizedName ?? "Unknown"
         let icon = app.icon
-        let title = getWindowTitle(app.processIdentifier)
+        let title: String?
+        if isAccessibilityEnabled() {
+            title = getWindowTitle(app.processIdentifier)
+        } else {
+            showAccessibilityToastIfNeeded()
+            title = nil
+        }
 
         return FocusedWindowInfo(
             appName: appName, icon: icon,

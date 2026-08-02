@@ -210,7 +210,7 @@ struct ApplicationTableView: View {
 }
 
 struct PreferencesFilterView: View {
-    @ObservedObject var store: PreferencesStore
+    @Bindable var store: PreferencesStore
     @State private var appItems: [AppItem] = []
     @State private var mediaItems: [AppItem] = []
 

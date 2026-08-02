@@ -22,6 +22,9 @@ extension PreferencesDataModel {
     
     @UserDefaultsRelay("ignoreNullName", defaultValue: true)
     static var ignoreNullArtist: BehaviorRelay<Bool>
+
+    @UserDefaultsRelay("keepMacAwake", defaultValue: false)
+    static var keepMacAwake: BehaviorRelay<Bool>
     
 }
 

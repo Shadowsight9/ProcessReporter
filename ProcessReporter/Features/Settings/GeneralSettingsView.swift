@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct GeneralSettingsView: View {
-    @ObservedObject var store: PreferencesStore
+    @Bindable var store: PreferencesStore
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var importError: String?
     @State private var isImportingSettings = false
@@ -22,6 +22,16 @@ struct GeneralSettingsView: View {
                     set: setLaunchAtLogin
                 ))
                 
+            }
+
+            Section("Power") {
+                Toggle("Vibe Coding Mode", isOn: Binding(
+                    get: { store.keepMacAwake },
+                    set: { store.setKeepMacAwake($0) }
+                ))
+                Text("Keeps macOS awake for long-running tasks while still allowing the display to turn off normally. Closing a MacBook lid can still put it to sleep.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Report") {

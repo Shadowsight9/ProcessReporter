@@ -2,13 +2,15 @@ import AppKit
 import SwiftUI
 
 struct ShellIntegrationSettingsView: View {
-    @ObservedObject var store: PreferencesStore
+    @Bindable var store: PreferencesStore
     @State private var draft = PreferencesDataModel.shellIntegration.value
     @State private var isTesting = false
     @State private var environmentVariablesExpanded = false
 
     private let environmentVariables = [
         "PROCESS_REPORTER_JSON",
+        "PROCESS_REPORTER_EVENT",
+        "PROCESS_REPORTER_SCREEN_STATE",
         "PROCESS_REPORTER_PROCESS_NAME",
         "PROCESS_REPORTER_PROCESS_DESCRIPTION",
         "PROCESS_REPORTER_PROCESS_USAGE_DURATION",
@@ -38,7 +40,9 @@ struct ShellIntegrationSettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .onReceive(store.$shellIntegration) { draft = $0 }
+        .onChange(of: store.shellIntegration) { _, integration in
+            draft = integration
+        }
     }
 
     private var header: some View {

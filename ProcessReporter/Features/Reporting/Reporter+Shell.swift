@@ -2,6 +2,11 @@ import Foundation
 import Darwin
 
 private struct ShellReportPayload: Codable {
+    struct EventPayload: Codable {
+        var type: String
+        var screenState: String
+    }
+
     struct ProcessPayload: Codable {
         var name: String
         var description: String
@@ -22,9 +27,53 @@ private struct ShellReportPayload: Codable {
     }
 
     var timestamp: String
+    var event: EventPayload
     var process: ProcessPayload
     var media: MediaPayload
     var foregroundUsage: ForegroundUsageSnapshot
+}
+
+enum ShellIntegrationEvent: String, Sendable {
+    case report
+    case screenSleep = "screen_sleep"
+    case screenWake = "screen_wake"
+
+    var screenState: String {
+        switch self {
+        case .report:
+            return ""
+        case .screenSleep:
+            return "off"
+        case .screenWake:
+            return "on"
+        }
+    }
+}
+
+actor ShellEventDispatcher {
+    static let shared = ShellEventDispatcher()
+
+    private var pendingEvents: [ShellIntegrationEvent] = []
+    private var isSending = false
+
+    nonisolated func enqueue(_ event: ShellIntegrationEvent) {
+        Task {
+            await append(event)
+        }
+    }
+
+    private func append(_ event: ShellIntegrationEvent) async {
+        pendingEvents.append(event)
+        guard !isSending else { return }
+
+        isSending = true
+        defer { isSending = false }
+
+        while !pendingEvents.isEmpty {
+            let nextEvent = pendingEvents.removeFirst()
+            _ = await ShellReporterExtension.send(event: nextEvent)
+        }
+    }
 }
 
 private struct ShellCommandResult {
@@ -110,6 +159,47 @@ private enum ShellCommandRunner {
     }
 }
 
+private actor ShellCommandExecutionQueue {
+    static let shared = ShellCommandExecutionQueue()
+
+    private var isRunning = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func run(
+        command: String,
+        timeoutSeconds: Int,
+        environment: [String: String]
+    ) async -> ShellCommandResult {
+        await acquire()
+        let result = await ShellCommandRunner.run(
+            command: command,
+            timeoutSeconds: timeoutSeconds,
+            environment: environment
+        )
+        release()
+        return result
+    }
+
+    private func acquire() async {
+        if !isRunning {
+            isRunning = true
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    private func release() {
+        if waiters.isEmpty {
+            isRunning = false
+        } else {
+            waiters.removeFirst().resume()
+        }
+    }
+}
+
 class ShellReporterExtension: ReporterExtension {
     var name: String = "Shell"
 
@@ -119,7 +209,7 @@ class ShellReporterExtension: ReporterExtension {
 
     func createReporterOptions() -> ReporterOptions {
         ReporterOptions { snapshot in
-            await Self.send(snapshot: snapshot, requireEnabled: true)
+            await Self.send(snapshot: snapshot, event: .report, requireEnabled: true)
         }
     }
 
@@ -129,11 +219,24 @@ class ShellReporterExtension: ReporterExtension {
         }
         return await send(
             snapshot: ReportSnapshot(data, foregroundUsage: foregroundUsage),
+            event: .report,
             requireEnabled: requireEnabled
         )
     }
 
-    static func send(snapshot: ReportSnapshot, requireEnabled: Bool) async -> Result<Void, ReporterError> {
+    static func send(
+        event: ShellIntegrationEvent,
+        requireEnabled: Bool = true
+    ) async -> Result<Void, ReporterError> {
+        let snapshot = ReportSnapshot(eventAt: .now)
+        return await send(snapshot: snapshot, event: event, requireEnabled: requireEnabled)
+    }
+
+    static func send(
+        snapshot: ReportSnapshot,
+        event: ShellIntegrationEvent,
+        requireEnabled: Bool
+    ) async -> Result<Void, ReporterError> {
         let config = PreferencesDataModel.shellIntegration.value.sanitized()
         let slotIndex = config.normalizedSelectedSlotIndex
         let slot = config.selectedSlot
@@ -141,12 +244,12 @@ class ShellReporterExtension: ReporterExtension {
         guard !slot.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .failure(.ignored)
         }
-        guard snapshot.hasProcessInfo || snapshot.hasMediaInfo else {
+        guard event != .report || snapshot.hasProcessInfo || snapshot.hasMediaInfo else {
             return .failure(.ignored)
         }
 
-        let environment = makeEnvironment(snapshot: snapshot)
-        let result = await ShellCommandRunner.run(
+        let environment = makeEnvironment(snapshot: snapshot, event: event)
+        let result = await ShellCommandExecutionQueue.shared.run(
             command: slot.command,
             timeoutSeconds: slot.timeoutSeconds,
             environment: environment
@@ -170,13 +273,17 @@ class ShellReporterExtension: ReporterExtension {
         return .failure(.networkError("Shell command exited with \(result.exitCode)"))
     }
 
-    private static func makeEnvironment(snapshot: ReportSnapshot) -> [String: String] {
+    private static func makeEnvironment(
+        snapshot: ReportSnapshot,
+        event: ShellIntegrationEvent
+    ) -> [String: String] {
         let processBundleID = snapshot.processBundleID ?? ""
         let mediaBundleID = snapshot.mediaBundleID ?? ""
         let playing = snapshot.mediaPlaying ? "true" : "false"
 
         let payload = ShellReportPayload(
             timestamp: iso8601.string(from: snapshot.timeStamp),
+            event: .init(type: event.rawValue, screenState: event.screenState),
             process: .init(
                 name: snapshot.processName ?? "",
                 description: snapshot.processDescription ?? "",
@@ -202,6 +309,8 @@ class ShellReporterExtension: ReporterExtension {
         let processUsageSeconds = snapshot.foregroundUsage.duration(forBundleIdentifier: snapshot.processBundleID)
 
         return [
+            "PROCESS_REPORTER_EVENT": event.rawValue,
+            "PROCESS_REPORTER_SCREEN_STATE": event.screenState,
             "PROCESS_REPORTER_PROCESS_NAME": snapshot.processName ?? "",
             "PROCESS_REPORTER_PROCESS_DESCRIPTION": snapshot.processDescription ?? "",
             "PROCESS_REPORTER_PROCESS_USAGE_DURATION": String(processUsageSeconds),

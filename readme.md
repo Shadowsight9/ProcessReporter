@@ -127,6 +127,8 @@ Commands run through `/bin/zsh -lc` with your user permissions. Only run command
 Every shell report gets these variables. Missing values are empty strings.
 
 - `PROCESS_REPORTER_JSON`
+- `PROCESS_REPORTER_EVENT` (`report`, `screen_sleep`, or `screen_wake`)
+- `PROCESS_REPORTER_SCREEN_STATE` (`off`, `on`, or empty for a regular report)
 - `PROCESS_REPORTER_PROCESS_NAME`
 - `PROCESS_REPORTER_PROCESS_DESCRIPTION`
 - `PROCESS_REPORTER_PROCESS_USAGE_DURATION`
@@ -143,7 +145,7 @@ Every shell report gets these variables. Missing values are empty strings.
 - `PROCESS_REPORTER_MEDIA_PLAYING`
 - `PROCESS_REPORTER_TIMESTAMP`
 
-`PROCESS_REPORTER_JSON` contains the same report as structured JSON, including process, media, and foreground usage data.
+`PROCESS_REPORTER_JSON` contains the same report as structured JSON, including the event type, screen state, process, media, and foreground usage data. Screen sleep and wake events run the selected Shell command even when there is no process or media payload.
 
 The environment variable prefix stays `PROCESS_REPORTER_*` for compatibility with existing scripts. Statusa got a new name, but your webhook should not have to wake up confused.
 
@@ -157,6 +159,18 @@ Start private:
 - Filter password managers, banking apps, private browsers, and sensitive work tools.
 - Map raw names into vague public labels when publishing status.
 - Keep webhook URLs secret.
+
+## Vibe Coding Mode
+
+Enable **Vibe Coding Mode** from the menu bar when a build, agent, download, or other long-running task should continue unattended. Statusa keeps macOS awake while still allowing the display to sleep according to the normal system settings.
+
+After enabling it, choose **Turn Display Off Now** to sleep the display immediately. Mouse or keyboard input wakes the display again while the background task keeps running.
+
+The mode needs no administrator permission, starts no separate `caffeinate` process, releases its power assertions when disabled or when Statusa quits, and does not prevent a MacBook from sleeping when its lid is closed.
+
+The IOKit assertion approach is adapted from the MIT-licensed `demiaochen/caffeinate-disablesleep` project. Statusa intentionally uses only the system-awake/display-may-sleep behavior; it does not change `pmset disablesleep` or install sudoers rules.
+
+See `THIRD_PARTY_NOTICES.md` for the full third-party license notice.
 
 ## Troubleshooting
 
@@ -188,3 +202,15 @@ Useful entry points:
 2026 © Shadowsight9, released under the MIT License.
 
 Forked from Innei's ProcessReporter. Original work © Innei, also released under the MIT License.
+
+## Beginner development path
+
+If you are learning macOS and Swift with this project, start with the Chinese walkthrough in [`docs/LEARNING_GUIDE.zh-CN.md`](docs/LEARNING_GUIDE.zh-CN.md). It explains the data flow, reading order, concurrency boundaries, and small practice tasks.
+
+Run the complete local verification loop with:
+
+```sh
+scripts/check.sh
+```
+
+The Release Workflow injects the app version from the Git tag. For example, `v1.6.0` becomes `CFBundleShortVersionString = 1.6.0`, while the commit count becomes the build number. Prerelease tags such as `v1.6.0-beta.1` are also supported.

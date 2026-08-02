@@ -15,6 +15,7 @@ let package = Package(
                 "History",
                 "Media",
                 "Monitoring",
+                "Power/KeepAwakeController.swift",
                 "Reporting/ReportSnapshot.swift",
                 "Reporting/Reporter.swift",
                 "Reporting/Reporter+Shell.swift",
@@ -34,11 +35,14 @@ let package = Package(
                 "Settings/Persistence/PreferencesDataModel+Integration.swift",
                 "Settings/Persistence/PreferencesDataModel+Mapping.swift",
                 "Settings/Persistence/UserDefaultsRelay.swift",
-                "StatusMenu",
+                "StatusMenu/StatusMenuStore.swift",
+                "StatusMenu/StatusMenuView.swift",
             ],
             sources: [
+                "Power/KeepAwakeConfiguration.swift",
                 "Reporting/ReportFingerprint.swift",
                 "Settings/Persistence/MappingDictionaryParser.swift",
+                "StatusMenu/StatusPresentation.swift",
             ]
         ),
         .testTarget(

@@ -13,6 +13,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ProcessReporter", category: "AppDelegate")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppModel.shared.start()
         disableAutomaticTextSubstitutions()
         setupMenu()
         DispatchQueue.main.async {
@@ -24,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Setup sleep/wake notifications for cache cleanup
         setupSleepWakeNotifications()
+        setupScreenNotifications()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
             if !PreferencesDataModel.shared.isEnabled.value {
@@ -49,6 +51,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
+        AppModel.shared.stopPowerAssertions()
+        MediaInfoManager.stopMonitoringPlaybackChanges()
+        ApplicationMonitor.shared.stopWindowFocusMonitoring()
+
         // Cleanup database resources
         Task {
             await Database.shared.cleanup()
@@ -81,6 +87,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func setupScreenNotifications() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(screensDidSleep),
+            name: NSWorkspace.screensDidSleepNotification,
+            object: nil
+        )
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(screensDidWake),
+            name: NSWorkspace.screensDidWakeNotification,
+            object: nil
+        )
+    }
+
+    @MainActor
+    @objc private func screensDidSleep() {
+        StatusMenuStore.shared.updateScreenState(.off)
+        sendScreenEvent(.screenSleep)
+    }
+
+    @MainActor
+    @objc private func screensDidWake() {
+        StatusMenuStore.shared.updateScreenState(.on)
+        sendScreenEvent(.screenWake)
+    }
+
+    private func sendScreenEvent(_ event: ShellIntegrationEvent) {
+        ShellEventDispatcher.shared.enqueue(event)
+    }
+
     @MainActor
     @objc private func willSleep() {
         logger.info("System will sleep - cleaning up caches")
@@ -100,11 +138,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         AppUtility.shared.clearCache()
 
         // Clean up reporter caches
-        Task { @MainActor in
-            if let reporter = reporter {
-                reporter.clearCaches()
-            }
-        }
+        AppModel.shared.clearReporterCaches()
 
         // Pause media monitoring but keep the callback so wake handling can restore it.
         MediaInfoManager.suspendMonitoringPlaybackChanges()
@@ -129,9 +163,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             
             // Notify reporter to reinitialize if needed
-            if let reporter = reporter {
-                await reporter.handleWakeFromSleep()
-            }
+            await AppModel.shared.handleWakeFromSleep()
         }
 
         logger.info("Components reinitialized after wake")

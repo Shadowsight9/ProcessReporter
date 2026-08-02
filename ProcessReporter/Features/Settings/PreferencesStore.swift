@@ -1,17 +1,19 @@
-import Combine
 import Foundation
+import Observation
 
 @MainActor
-final class PreferencesStore: ObservableObject {
-    @Published var isEnabled = PreferencesDataModel.isEnabled.value
-    @Published var reportOnFocusChange = PreferencesDataModel.reportOnFocusChange.value
-    @Published var sendInterval = PreferencesDataModel.sendInterval.value
-    @Published var enabledTypes = PreferencesDataModel.enabledTypes.value.types
-    @Published var ignoreNullArtist = PreferencesDataModel.ignoreNullArtist.value
-    @Published var shellIntegration = PreferencesDataModel.shellIntegration.value
-    @Published var mappings = PreferencesDataModel.mappingList.value
-    @Published var filteredProcesses = PreferencesDataModel.filteredProcesses.value
-    @Published var filteredMediaProcesses = PreferencesDataModel.filteredMediaProcesses.value
+@Observable
+final class PreferencesStore {
+    var isEnabled = PreferencesDataModel.isEnabled.value
+    var reportOnFocusChange = PreferencesDataModel.reportOnFocusChange.value
+    var sendInterval = PreferencesDataModel.sendInterval.value
+    var enabledTypes = PreferencesDataModel.enabledTypes.value.types
+    var ignoreNullArtist = PreferencesDataModel.ignoreNullArtist.value
+    var keepMacAwake = PreferencesDataModel.keepMacAwake.value
+    var shellIntegration = PreferencesDataModel.shellIntegration.value
+    var mappings = PreferencesDataModel.mappingList.value
+    var filteredProcesses = PreferencesDataModel.filteredProcesses.value
+    var filteredMediaProcesses = PreferencesDataModel.filteredMediaProcesses.value
 
     private var subscriptions: [RelaySubscription] = []
 
@@ -22,6 +24,7 @@ final class PreferencesStore: ObservableObject {
             PreferencesDataModel.sendInterval.subscribeOnMain { [weak self] in self?.sendInterval = $0 },
             PreferencesDataModel.enabledTypes.subscribeOnMain { [weak self] in self?.enabledTypes = $0.types },
             PreferencesDataModel.ignoreNullArtist.subscribeOnMain { [weak self] in self?.ignoreNullArtist = $0 },
+            PreferencesDataModel.keepMacAwake.subscribeOnMain { [weak self] in self?.keepMacAwake = $0 },
             PreferencesDataModel.shellIntegration.subscribeOnMain { [weak self] in self?.shellIntegration = $0 },
             PreferencesDataModel.mappingList.subscribeOnMain { [weak self] in self?.mappings = $0 },
             PreferencesDataModel.filteredProcesses.subscribeOnMain { [weak self] in self?.filteredProcesses = $0 },
@@ -43,6 +46,10 @@ final class PreferencesStore: ObservableObject {
 
     func setIgnoreNullArtist(_ value: Bool) {
         PreferencesDataModel.ignoreNullArtist.accept(value)
+    }
+
+    func setKeepMacAwake(_ value: Bool) {
+        PreferencesDataModel.keepMacAwake.accept(value)
     }
 
     func setReportType(_ type: Reporter.Types, enabled: Bool) {
@@ -148,9 +155,6 @@ final class PreferencesStore: ObservableObject {
         return true
     }
 
-    deinit {
-        subscriptions.forEach { $0.dispose() }
-    }
 }
 
 enum PreferencesStoreError: LocalizedError {

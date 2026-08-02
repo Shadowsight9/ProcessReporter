@@ -127,6 +127,8 @@ printf '%s\n' "$message"
 每次 shell 上报都会收到这些变量。没有值的字段是空字符串。
 
 - `PROCESS_REPORTER_JSON`
+- `PROCESS_REPORTER_EVENT`（`report`、`screen_sleep` 或 `screen_wake`）
+- `PROCESS_REPORTER_SCREEN_STATE`（`off`、`on`，普通上报时为空）
 - `PROCESS_REPORTER_PROCESS_NAME`
 - `PROCESS_REPORTER_PROCESS_DESCRIPTION`
 - `PROCESS_REPORTER_PROCESS_USAGE_DURATION`
@@ -143,7 +145,7 @@ printf '%s\n' "$message"
 - `PROCESS_REPORTER_MEDIA_PLAYING`
 - `PROCESS_REPORTER_TIMESTAMP`
 
-`PROCESS_REPORTER_JSON` 是同一份报告的结构化 JSON，包含应用、媒体和前台使用数据。
+`PROCESS_REPORTER_JSON` 是同一份报告的结构化 JSON，包含事件类型、屏幕状态、应用、媒体和前台使用数据。息屏和亮屏事件即使没有应用或媒体数据，也会执行当前选中的 Shell 命令。
 
 这些环境变量名沿用 `PROCESS_REPORTER_*` 前缀，方便旧脚本继续工作。Statusa 换了新名字，但不会突然把你的 webhook 脚本弄哭。
 
@@ -157,6 +159,23 @@ Statusa 不截图，不记录键盘输入，不读取文件内容，也不追踪
 - 过滤密码管理器、银行应用、隐私浏览器和敏感工作工具。
 - 公开展示时，把原始名称映射成模糊描述。
 - 妥善保管 webhook 地址。
+
+## Vibe Coding 模式
+
+菜单栏里的 **Vibe Coding Mode** 会保持 macOS 系统唤醒，适合长时间运行编译、Agent、下载或其他无人值守任务。它不会阻止显示器按系统设置自动关闭，所以可以让任务继续运行，同时减少屏幕常亮。
+
+启用后可以点击 **Turn Display Off Now** 立即关闭显示器；移动鼠标或按键即可重新点亮，后台任务会继续运行。
+
+这个模式：
+
+- 不需要管理员权限。
+- 不会启动额外的 `caffeinate` 子进程。
+- 关闭开关或退出 Statusa 时会立即释放电源断言。
+- 不会阻止 MacBook 因合盖而睡眠。
+
+实现采用 IOKit 电源断言，核心思路参考并改编自 MIT 许可的 `demiaochen/caffeinate-disablesleep`。Statusa 只使用“保持系统唤醒、允许屏幕休眠”的部分，不会修改 `pmset disablesleep`，也不会安装 sudoers 规则。
+
+完整第三方许可见 `THIRD_PARTY_NOTICES.md`。
 
 ## 常见问题
 
@@ -188,3 +207,21 @@ xcodebuild -project ProcessReporter.xcodeproj -scheme ProcessReporter -configura
 2026 © Shadowsight9, released under the MIT License.
 
 本项目 fork 自 Innei 的 ProcessReporter。原始作品 © Innei，同样基于 MIT License 发布。
+
+## 新手开发与学习
+
+如果你刚开始学习 macOS + Swift，建议先阅读 [`docs/LEARNING_GUIDE.zh-CN.md`](docs/LEARNING_GUIDE.zh-CN.md)。它包含项目数据流、推荐阅读顺序、并发概念和循序渐进的练习。
+
+统一运行测试和 Debug 构建：
+
+```sh
+scripts/check.sh
+```
+
+快速反馈时可以只运行纯逻辑测试：
+
+```sh
+swift test
+```
+
+Release Workflow 会从 Git 标签自动写入应用版本：例如 `v1.6.0` 会生成 `CFBundleShortVersionString = 1.6.0`，构建号使用当前提交数量。支持 `v1.6.0-beta.1` 这类预发布标签。

@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct ShellIntegration: UserDefaultsJSONStorable {
+struct ShellIntegration: UserDefaultsJSONStorable, Equatable {
     static let slotCount = 4
 
     var slots: [ShellCommandSlot] = ShellCommandSlot.defaultSlots()

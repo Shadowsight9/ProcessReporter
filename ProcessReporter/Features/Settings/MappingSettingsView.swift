@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MappingSettingsView: View {
-	@ObservedObject var store: PreferencesStore
+	@Bindable var store: PreferencesStore
 	@State var selectedItem: Set<String> = []
 
 	@State var addNewItemSheetOpen = false

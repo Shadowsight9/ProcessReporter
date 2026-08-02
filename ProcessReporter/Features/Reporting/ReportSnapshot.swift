@@ -47,6 +47,31 @@ struct ReportSnapshot: Sendable {
         self.foregroundUsage = foregroundUsage
     }
 
+    init(eventAt timeStamp: Date = .now) {
+        id = UUID()
+        self.timeStamp = timeStamp
+        processName = nil
+        processDescription = nil
+        windowTitle = nil
+        processBundleID = nil
+        artist = nil
+        mediaName = nil
+        mediaProcessName = nil
+        mediaProcessDescription = nil
+        mediaBundleID = nil
+        mediaAlbum = nil
+        mediaDuration = nil
+        mediaElapsedTime = nil
+        mediaPlaying = false
+        mediaImageData = nil
+        foregroundUsage = .init(
+            date: "",
+            apps: [],
+            totalDuration: 0,
+            currentBundleIdentifier: nil
+        )
+    }
+
     var hasMediaInfo: Bool {
         mediaName != nil || artist != nil
     }

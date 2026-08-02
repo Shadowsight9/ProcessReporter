@@ -1,34 +1,33 @@
 import AppKit
 import SwiftUI
 
-var reporter: Reporter?
-
 @main
 struct ProcessReporterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @ObservedObject private var statusStore = StatusMenuStore.shared
+    @State private var appModel = AppModel.shared
+    @State private var statusStore = StatusMenuStore.shared
 
-    init() {
-        Task { @MainActor in
-            do {
-                try await DataStore.shared.initialize()
-                reporter = Reporter()
-            } catch {
-                let alert = NSAlert()
-                alert.alertStyle = .critical
-                alert.messageText = "Database Initialization Failed"
-                alert.informativeText = error.localizedDescription
-                alert.addButton(withTitle: "Quit")
-                alert.runModal()
-                NSApplication.shared.terminate(nil)
-            }
-        }
+    private var statusPresentation: StatusPresentation {
+        statusStore.presentation(launch: appModel.launchKind)
     }
 
     var body: some Scene {
-        MenuBarExtra("Statusa", systemImage: statusStore.systemImage) {
-            StatusMenuView()
+        MenuBarExtra {
+            StatusMenuView(appModel: appModel)
+        } label: {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: statusPresentation.menuBarSymbol)
+                if let badge = statusStore.menuBarBadgeSymbol {
+                    Image(systemName: badge)
+                        .font(.system(size: 7, weight: .bold))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.primary, Color(nsColor: .windowBackgroundColor))
+                        .offset(x: 3, y: 2)
+                }
+            }
+            .accessibilityLabel("Statusa, \(statusPresentation.headline)")
         }
+        .menuBarExtraStyle(.window)
         Settings {
             SettingsRootView()
         }
@@ -68,6 +67,7 @@ struct ProcessReporterApp: App {
             }
         }
     }
+
 }
 
 func setupMenu() {

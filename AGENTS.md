@@ -4,104 +4,114 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Project Overview
 
-ProcessReporter is a macOS application that monitors and reports user activity, including focused applications, window titles, and media playback information. The application runs in the menu bar and can report activity to various services like MixSpace, S3, and Slack.
+Statusa (the Xcode project is still named ProcessReporter) is a macOS 15+ menu bar app that observes the focused application, optional window title, foreground duration, and system now-playing metadata. Reports are stored locally with SwiftData and can be sent through user-configured shell commands.
+
+The repository intentionally uses Apple-first technologies and has no third-party Swift package dependencies.
 
 ## Build and Development Commands
 
-### Building and Running
 ```bash
-# Open the project in Xcode
+# Open in Xcode
 open ProcessReporter.xcodeproj
 
-# Build from command line (if needed)
-xcodebuild -project ProcessReporter.xcodeproj -scheme ProcessReporter -configuration Debug build
+# Preferred local verification: Swift tests + unsigned Debug build
+scripts/check.sh
 
-# The app requires Xcode 15+ and macOS 15+ to build and run
+# Fast pure-logic tests
+swift test
+
+# App-only command line build
+xcodebuild \
+  -project ProcessReporter.xcodeproj \
+  -scheme ProcessReporter \
+  -configuration Debug \
+  -derivedDataPath .build/xcode-derived-data \
+  CODE_SIGNING_ALLOWED=NO \
+  build
 ```
 
-### Development Setup
-- The project uses xcode-build-server for LSP integration (configured in buildServer.json)
-- Dependencies are managed through Swift Package Manager (Package.swift)
+Requirements:
 
-## Architecture Overview
+- macOS 15+
+- Xcode 16.2+ (the project file was last upgraded with Xcode 16.2)
+- Accessibility permission for window titles
 
-### Core Components Structure
+## Current Architecture
 
-1. **Reporter System** (`ProcessReporter/Core/Reporter/`)
-   - `Reporter.swift`: Central reporting engine that manages the reporting lifecycle
-   - `ReporterExtension.swift`: Protocol for creating reporting extensions
-   - Extensions support async/sync operations with 30-second timeout
-   - Built-in extensions: MixSpace, S3, Slack
+### App lifecycle (`ProcessReporter/App/`)
 
-2. **Application Monitoring** (`ProcessReporter/Core/Utilities/`)
-   - `ApplicationMonitor.swift`: Monitors focused window changes and mouse clicks
-   - Uses NSWorkspace notifications and CGEvent tap for tracking
-   - Requires accessibility permissions to read window titles
+- `ProcessReporterApp.swift`: SwiftUI `App`, `MenuBarExtra`, app commands.
+- `AppModel.swift`: observable startup state and ownership of `Reporter`.
+- `AppDelegate.swift`: AppKit lifecycle plus sleep, wake, and screen notifications.
+- `SettingsWindowPresenter.swift`: explicit AppKit settings-window presentation.
 
-3. **Media Tracking** (`ProcessReporter/Core/MediaInfoManager/`)
-   - `MediaInfoManager.swift`: Monitors system-wide media playback
-   - `MediaInfo.swift`: Data model for media information
-   - Integrates with macOS media APIs to capture currently playing media
+### Status UI (`ProcessReporter/Features/StatusMenu/`)
 
-4. **Database Layer** (`ProcessReporter/Core/Database/`)
-   - SQLite-based persistence using `Database.swift`
-   - Stores application history and report data
-   - Thread-safe operations with proper error handling
+- `StatusMenuView.swift`: SwiftUI menu bar panel.
+- `StatusMenuStore.swift`: `@Observable` UI state and user actions.
+- `StatusPresentation.swift`: pure status-to-symbol/text mapping; covered by Swift Testing.
 
-5. **Preferences System** (`ProcessReporter/Preferences/`)
-   - MVC architecture with separate controllers for each preference pane
-   - Preference panes: General, Filters, Integrations, Mapping
-   - `PreferencesDataModel.swift`: Central data model for all preferences
+### Monitoring and media
 
-### Key Design Patterns
+- `ApplicationMonitor.swift`: focused app/window observation and Accessibility handling.
+- `ForegroundUsageTracker.swift`: per-app duration tracking.
+- `MediaInfoManager.swift`: media cache, monitoring, and async fetch coordination.
+- `SystemNowPlayingProvider.swift`: private MediaRemote-backed implementation.
 
-1. **Extension Architecture**: Reporter extensions allow modular integration with external services
-2. **Reactive Programming**: Uses RxSwift for state management and event handling
-3. **MVC Pattern**: Preferences system follows MVC with clear separation of concerns
-4. **Singleton Pattern**: Used for managers like Reporter, MediaInfoManager, and ApplicationMonitor
+### Power (`ProcessReporter/Features/Power/`)
 
-### Data Flow
+- `KeepAwakeController.swift`: IOKit system-sleep assertions and immediate display sleep.
+- `KeepAwakeConfiguration.swift`: pure, tested assertion/command configuration.
+- This implementation adapts an MIT-licensed approach; preserve `THIRD_PARTY_NOTICES.md`.
 
-1. ApplicationMonitor detects window/app changes → Creates FocusedWindowInfo
-2. MediaInfoManager tracks media playback → Creates MediaInfo
-3. Reporter combines data → Creates ReportModel
-4. Reporter extensions process ReportModel → Send to external services
+### Reporting (`ProcessReporter/Features/Reporting/`)
 
-### Important Files and Their Roles
+- `Reporter.swift`: main orchestration, filtering, mapping, deduplication, timer, and delivery.
+- `ReportSnapshot.swift`: Sendable value crossing reporting/concurrency boundaries.
+- `Reporter+Shell.swift`: shell integration, environment payload, timeout, serial execution.
+- `Reporter+Types.swift`: report types and extension protocol.
 
-- `main.swift`: Application entry point, sets up menu structure
-- `AppDelegate.swift`: Manages app lifecycle, permissions, and initialization
-- `StatusItemManager.swift`: Handles menu bar UI and user interactions
-- `ReportModel.swift`: Central data structure containing all activity information
+### Persistence and settings
 
-### Integration Points
+- `DataStore.swift`: actor and sole intended gateway to SwiftData for application features.
+- `Database.swift`: ModelContainer setup and background contexts.
+- `PreferencesStore.swift`: Observation-based UI facade.
+- `PreferencesDataModel+*.swift`: UserDefaults-backed preference definitions.
+- `UserDefaultsRelay.swift`: small in-house observable persistence primitive.
 
-When adding new integrations:
-1. Create a new class conforming to `ReporterExtension` protocol
-2. Implement required methods: `canRun()`, `run()`, `runSync()` 
-3. Add to Reporter's extension list in initialization
-4. Create preferences UI in Integrations pane if needed
+## Design Rules
 
-### Common Development Tasks
+1. Keep SwiftUI views declarative; move state and actions into observable stores/models.
+2. UI-facing mutable state belongs on `@MainActor`.
+3. Use actors for shared asynchronous mutable state.
+4. Pass value types such as `ReportSnapshot` across concurrency boundaries.
+5. Keep SwiftData access behind `DataStore`; do not leak persistent models into new views/services.
+6. Put pure display/parsing rules in small files that the Swift package test target can compile.
+7. Prefer incremental modernization over broad rewrites, especially around media and Accessibility APIs.
+8. Shell commands run with the user's permissions; preserve privacy and never enable imported commands automatically.
 
-When modifying reporting behavior:
-- Check `Reporter.swift` for the main reporting loop
-- Extensions are processed sequentially with error isolation
-- Failed extensions don't block other extensions
+## Tests
 
-When working with preferences:
-- Each preference pane has its own ViewController in `Preferences/`
-- Data models are in `Preferences/Data/`
-- Use `AppDelegate.savePreferences()` to persist changes
+`Package.swift` defines a lightweight testable core target rather than attempting to compile the full AppKit app as a Swift package. When adding a pure helper:
 
-When debugging window tracking:
-- Check accessibility permissions in System Settings
-- Use `ApplicationMonitor`'s logging for window change events
-- Window titles may be nil if permissions are insufficient
+1. Add its source path to the target's `sources` list.
+2. Exclude surrounding app-only files as needed.
+3. Add tests under `Tests/ProcessReporterCoreChecksTests/` using Swift Testing (`import Testing`, `@Test`, `#expect`).
+4. Run both `swift test` and the Xcode build, preferably through `scripts/check.sh`.
 
-### Security Considerations
+## Good Beginner Changes
 
-- The app requires accessibility permissions to read window titles
-- Handle sensitive information carefully in reports
-- Integration credentials should be stored securely in UserDefaults
-- Be mindful of user privacy when implementing new features
+- Status text/symbol behavior plus tests.
+- Pure mapping, formatting, and payload helpers.
+- Small SwiftUI layout improvements.
+- History UI that continues to use `DataStore`.
+
+High-risk areas to change only with focused verification:
+
+- `SystemNowPlayingProvider.swift` and private media APIs.
+- Accessibility permission behavior.
+- SwiftData migration/recovery logic.
+- Shell process termination and timeout handling.
+- Enabling Swift 6 language mode across the whole app.
+
+See `docs/LEARNING_GUIDE.zh-CN.md` for the recommended learning order.

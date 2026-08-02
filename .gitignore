@@ -1,4 +1,7 @@
-xcuserdata
+.DS_Store
+.build/
+DerivedData/
+build/
 buildServer.json
-.build
- 
+*.xcuserstate
+xcuserdata/

@@ -76,7 +76,6 @@ class Reporter {
 
 		// Restart application monitoring if it was active
 		if PreferencesDataModel.shared.isEnabled.value {
-			ApplicationMonitor.shared.startMouseMonitoring()
 			ApplicationMonitor.shared.startWindowFocusMonitoring()
 			if let info = ApplicationMonitor.shared.getFocusedWindowInfo() {
 				ForegroundUsageTracker.shared.focusChanged(to: info)
@@ -154,10 +153,10 @@ class Reporter {
 		}
 
 		if failures.isEmpty {
-			StatusMenuStore.shared.status = .syncing
+			StatusMenuStore.shared.updateDeliveryState(.success)
 			return .success(successNames)
 		} else {
-			StatusMenuStore.shared.status = isAllFailed ? .error : .partialError
+			StatusMenuStore.shared.updateDeliveryState(isAllFailed ? .failure : .partialFailure)
 			return .failure(.failure(failureNames))
 		}
 	}
@@ -232,11 +231,11 @@ class Reporter {
 	}
 
 	private func monitor(promptForAccessibility: Bool) {
-		ApplicationMonitor.shared.startMouseMonitoring(promptIfNeeded: promptForAccessibility)
 		ApplicationMonitor.shared.startWindowFocusMonitoring(promptIfNeeded: promptForAccessibility)
 		ApplicationMonitor.shared.onWindowFocusChanged = { [weak self] info in
 			guard let self = self else { return }
 			ForegroundUsageTracker.shared.focusChanged(to: info)
+			StatusMenuStore.shared.updateCurrentProcess(info)
 			if PreferencesDataModel.shared.reportOnFocusChange.value
 				&& PreferencesDataModel.shared.enabledTypes.value.types.contains(.process)
 			{
@@ -262,7 +261,7 @@ class Reporter {
 				)
 			}
 		}
-		StatusMenuStore.shared.status = .syncing
+		StatusMenuStore.shared.updateDeliveryState(.idle)
 	}
 
 	private var reporterInitializedTime: Date
@@ -305,16 +304,9 @@ class Reporter {
 
 		let enabledTypes = PreferencesDataModel.shared.enabledTypes.value.types
 		if enabledTypes.isEmpty {
-			StatusMenuStore.shared.status = .paused
+			StatusMenuStore.shared.updateDeliveryState(.idle)
 			return
 		}
-		if !isNetworkAvailable() {
-			StatusMenuStore.shared.status = .offline
-			return
-		} else {
-			StatusMenuStore.shared.status = .syncing
-		}
-
 		var dataModel = ReportModel(
 			windowInfo: nil,
 			integrations: [],
@@ -342,12 +334,13 @@ class Reporter {
 		}
 
 		// Apply mapping rules to the data model before sending
-		applyMappingRules(to: &dataModel)
-		guard dataModel.hasProcessInfo || dataModel.hasMediaInfo else { return }
-		guard shouldSend(dataModel, now: now) else { return }
+			applyMappingRules(to: &dataModel)
+			guard dataModel.hasProcessInfo || dataModel.hasMediaInfo else { return }
+			guard shouldSend(dataModel, now: now) else { return }
 
-		_ = await send(data: dataModel)
-	}
+			StatusMenuStore.shared.updateDeliveryState(.sending)
+			_ = await send(data: dataModel)
+		}
 
 	private func shouldSend(_ report: ReportModel, now: Date) -> Bool {
 		let fingerprint = ReportFingerprint.make(
@@ -371,11 +364,10 @@ class Reporter {
 
 	private func dispose() {
 		ForegroundUsageTracker.shared.pause()
-		ApplicationMonitor.shared.stopMouseMonitoring()
 		ApplicationMonitor.shared.stopWindowFocusMonitoring()
 		MediaInfoManager.stopMonitoringPlaybackChanges()
 
-		StatusMenuStore.shared.status = .paused
+		StatusMenuStore.shared.updateDeliveryState(.idle)
 	}
 
 	private var timer: Timer?
@@ -398,6 +390,13 @@ class Reporter {
 
 	private func disposeTimer() {
 		timer?.invalidate()
+		timer = nil
+	}
+
+	func sendNow() {
+		guard PreferencesDataModel.shared.isEnabled.value else { return }
+		guard let info = ApplicationMonitor.shared.getFocusedWindowInfo() else { return }
+		prepareSend(windowInfo: info)
 	}
 
 	init() {

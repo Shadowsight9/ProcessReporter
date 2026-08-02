@@ -18,6 +18,7 @@ class PreferencesDataModel {
             "enabledTypes": PreferencesDataModel.enabledTypes.value.toStorable() ?? [Reporter.Types.media.rawValue, Reporter.Types.process.rawValue],
             "shellIntegration": PreferencesDataModel.shellIntegration.value.toDictionary(),
             "ignoreNullArtist": PreferencesDataModel.ignoreNullArtist.value,
+            "keepMacAwake": PreferencesDataModel.keepMacAwake.value,
             "filteredProcesses": PreferencesDataModel.filteredProcesses.value,
             "filteredMediaProcesses": PreferencesDataModel.filteredMediaProcesses.value,
             "mappingList": PreferencesDataModel.mappingList.value.map { $0.toDictionary() },
@@ -63,6 +64,9 @@ class PreferencesDataModel {
 			}
 			if let ignoreNullArtist = dictionary["ignoreNullArtist"] as? Bool {
 				PreferencesDataModel.ignoreNullArtist.accept(ignoreNullArtist)
+			}
+			if let keepMacAwake = dictionary["keepMacAwake"] as? Bool {
+				PreferencesDataModel.keepMacAwake.accept(keepMacAwake)
 			}
 			if let filteredProcesses = dictionary["filteredProcesses"] as? [String] {
 				PreferencesDataModel.filteredProcesses.accept(filteredProcesses)
